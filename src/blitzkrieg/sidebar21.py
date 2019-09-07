@@ -10,7 +10,8 @@ import anki.find
 from aqt import mw
 from anki.lang import ngettext, _
 from aqt.qt import *
-from aqt.utils import getOnlyText, askUser
+from aqt.utils import getOnlyText, askUser, showWarning
+from anki.errors import DeckRenameError
 
 
 class SidebarTreeWidget(QTreeWidget):
@@ -68,10 +69,15 @@ class SidebarTreeWidget(QTreeWidget):
 
             mw.checkpoint("Dragged "+dragItem.type)
             parse=mw.col.decks #used for parsing '::' separators
+
             if dragItem.type == "deck":
                 dragDid = parse.byName(dragName)["id"]
                 dropDid = parse.byName(dropName)["id"] if dropName else None
-                parse.renameForDragAndDrop(dragDid,dropDid)
+                try:
+                    parse.renameForDragAndDrop(dragDid,dropDid)
+                except DeckRenameError as e:
+                    showWarning(e.description)
+
             elif dragItem.type == "tag":
                 if dragName and not dropName:
                     if len(parse._path(dragName)) > 1:
