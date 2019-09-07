@@ -169,7 +169,7 @@ class SidebarTreeWidget(QTreeWidget):
                 mw.col.models.flush()
                 self.browser.setupTable()
             else: #rename
-                newName = getOnlyText(_("New search name:"),default=item.fullname)
+                newName = getOnlyText(_("New model name:"),default=item.fullname)
                 model['name'] = newName
                 mw.col.models.save(model)
                 mw.col.models.flush()
