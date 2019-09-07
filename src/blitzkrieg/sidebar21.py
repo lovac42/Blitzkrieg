@@ -15,6 +15,12 @@ from anki.errors import DeckRenameError
 
 
 class SidebarTreeWidget(QTreeWidget):
+    node_state = { # True for open, False for closed
+        #Decks are handled per deck settings
+        'group': {},
+        'tag': {},
+    }
+
     def __init__(self):
         QTreeWidget.__init__(self)
         self.browser = None
@@ -44,6 +50,11 @@ class SidebarTreeWidget(QTreeWidget):
     def onTreeCollapse(self, item):
         if getattr(item, 'oncollapse', None):
             item.oncollapse()
+            return
+        try:
+            exp = item.isExpanded()
+            self.node_state[item.type][item.fullname] = exp
+        except: pass
 
     def dropMimeData(self, parent, row, data, action):
         # Dealing with qt serialized data is a headache,
@@ -77,6 +88,7 @@ class SidebarTreeWidget(QTreeWidget):
                     parse.renameForDragAndDrop(dragDid,dropDid)
                 except DeckRenameError as e:
                     showWarning(e.description)
+                mw.col.decks.get(dropDid)['browserCollapsed']=False
 
             elif dragItem.type == "tag":
                 if dragName and not dropName:
@@ -86,6 +98,8 @@ class SidebarTreeWidget(QTreeWidget):
                     assert dropName.strip()
                     self.moveTag(dragName, dropName + "::" + parse._basename(dragName))
                 mw.col.tags.registerNotes()
+                self.node_state['tag'][dropName]=True
+
         self.browser.buildTree()
 
     def moveTag(self, dragName, newName="", rename=True):
@@ -99,116 +113,146 @@ class SidebarTreeWidget(QTreeWidget):
                 if rename:
                     nn = tag.replace(dragName+"::", newName+"::", 1)
                     mw.col.tags.bulkAdd(ids,nn)
+                    self.node_state['tag'][nn]=True
                 mw.col.tags.bulkRem(ids,tag)
         # rename parent
         ids = f.findNotes("tag:"+dragName)
         if rename:
             mw.col.tags.bulkAdd(ids,newName)
+            self.node_state['tag'][newName]=True
         mw.col.tags.bulkRem(ids,dragName)
         mw.col.tags.flush()
-
-    def _onTreeItemAction(self, item, action):
-        self.browser.editor.saveNow(self.hideEditor)
-        mw.checkpoint(action+" "+item.type)
-
-        if item.type == "deck":
-            self.browser._lastSearchTxt=""
-            did=mw.col.decks.byName(item.fullname)["id"]
-            if action=="Add":
-                deck = getOnlyText(_("Name for deck:"),default=item.fullname+"::")
-                if deck:
-                    mw.col.decks.id(deck)
-            elif action=="Delete":
-                self.mw.deckBrowser._delete(did)
-            else:
-                self.mw.deckBrowser._rename(did)
-            self.mw.reset(True)
-
-
-        elif item.type == "tag":
-            if action=="RenameL":
-                oldNameArr = item.fullname.split("::")
-                newName = getOnlyText(_("New tag name:"),default=oldNameArr[-1])
-                newName = newName.replace('"', "")
-                if not newName or newName == oldNameArr[-1]:
-                    return
-                oldNameArr[-1] = newName
-                newName = "::".join(oldNameArr)
-            elif action=="RenameB":
-                newName = getOnlyText(_("New tag name:"),default=item.fullname)
-                newName = newName.replace('"', "")
-                if not newName or newName == item.fullname:
-                    return
-
-            if action.startswith("Rename"):
-                self.moveTag(item.fullname,newName)
-            else:
-                self.moveTag(item.fullname,rename=False)
-            mw.col.tags.registerNotes()
-
-
-        elif item.type == "fav":
-            if action=="Delete":
-                if not askUser(_("Remove %s from your saved searches?") % item.fullname):
-                    return
-                del mw.col.conf['savedFilters'][item.fullname]
-            else: #rename
-                newName = getOnlyText(_("New search name:"),default=item.fullname)
-                act=mw.col.conf['savedFilters'][item.fullname]
-                mw.col.conf['savedFilters'][newName]=act
-                del(mw.col.conf['savedFilters'][item.fullname])
-                mw.col.setMod()
-
-
-        elif item.type == "model":
-            self.browser.form.searchEdit.lineEdit().setText("")
-            model = mw.col.models.byName(item.fullname)
-            if action=="Delete":
-                if mw.col.models.useCount(model):
-                    msg = _("Delete this note type and all its cards?")
-                else:
-                    msg = _("Delete this unused note type?")
-                if not askUser(msg, parent=self):
-                    return
-                mw.col.models.rem(model)
-                model = None
-                mw.col.models.flush()
-                self.browser.setupTable()
-            else: #rename
-                newName = getOnlyText(_("New model name:"),default=item.fullname)
-                model['name'] = newName
-                mw.col.models.save(model)
-                mw.col.models.flush()
-            self.browser.model.reset()
-
-        mw.col.setMod()
-        self.browser.buildTree()
-
-
-    def onTreeMenu(self, pos):
-        item=self.currentItem()
-        if not item:
-            return
-        if item.type in ("tag","deck","fav","model"):
-            m = QMenu(self)
-            if item.type == "deck":            
-                act = m.addAction("Add")
-                act.triggered.connect(lambda:self._onTreeItemAction(item,"Add"))
-            if item.type == "tag":
-                act = m.addAction("Rename Leaf")
-                act.triggered.connect(lambda:self._onTreeItemAction(item,"RenameL"))
-                act = m.addAction("Rename Branch")
-                act.triggered.connect(lambda:self._onTreeItemAction(item,"RenameB"))
-            else:
-                act = m.addAction("Rename")
-                act.triggered.connect(lambda:self._onTreeItemAction(item,"Rename"))
-            act = m.addAction("Delete")
-            act.triggered.connect(lambda:self._onTreeItemAction(item,"Delete"))
-            m.popup(QCursor.pos())
 
 
     def hideEditor(self):
         self.browser.editor.setNote(None)
         self.browser.singleCard=False
 
+    def onTreeMenu(self, pos):
+        item=self.currentItem()
+        if not item or item.type in ("sys","group"):
+            return
+        m = QMenu(self)
+        if item.type == "deck":
+            act = m.addAction("Add")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Add",self._onTreeDeckAdd))
+            act = m.addAction("Rename")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Rename",self._onTreeDeckRename))
+            act = m.addAction("Delete")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Delete",self._onTreeDeckDelete))
+        elif item.type == "tag":
+            act = m.addAction("Rename Leaf")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Rename",self._onTreeTagRenameLeaf))
+            act = m.addAction("Rename Branch")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Rename",self._onTreeTagRenameBranch))
+            act = m.addAction("Delete")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Delete",self._onTreeTagDelete))
+        elif item.type == "fav":
+            act = m.addAction("Rename")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Rename",self._onTreeFavRename))
+            act = m.addAction("Delete")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Delete",self._onTreeFavDelete))
+        elif item.type == "model":
+            act = m.addAction("Rename")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Rename",self._onTreeModelRename))
+            act = m.addAction("Delete")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Delete",self._onTreeModelDelete))
+        else:
+            return
+        m.popup(QCursor.pos())
+
+
+    def _onTreeItemAction(self, item, action, callback):
+        self.browser.editor.saveNow(self.hideEditor)
+        mw.checkpoint(action+" "+item.type)
+        callback(item)
+        mw.col.setMod()
+        self.browser.buildTree()
+
+    def _onTreeDeckAdd(self, item):
+        self.browser._lastSearchTxt=""
+        did=mw.col.decks.byName(item.fullname)["id"]
+        deck = getOnlyText(_("Name for deck:"),default=item.fullname+"::")
+        if deck:
+            mw.col.decks.id(deck)
+        self.mw.reset(True)
+
+    def _onTreeDeckDelete(self, item):
+        self.browser._lastSearchTxt=""
+        did=mw.col.decks.byName(item.fullname)["id"]
+        mw.deckBrowser._delete(did)
+        mw.reset(True)
+
+    def _onTreeDeckRename(self, item):
+        self.browser._lastSearchTxt=""
+        did=mw.col.decks.byName(item.fullname)["id"]
+        mw.deckBrowser._rename(did)
+        mw.reset(True)
+
+    def _onTreeTagRenameLeaf(self, item):
+        oldNameArr = item.fullname.split("::")
+        newName = getOnlyText(_("New tag name:"),default=oldNameArr[-1])
+        newName = newName.replace('"', "")
+        if not newName or newName == oldNameArr[-1]:
+            return
+        oldNameArr[-1] = newName
+        newName = "::".join(oldNameArr)
+        self.moveTag(item.fullname,newName)
+        mw.col.tags.registerNotes()
+
+    def _onTreeTagRenameBranch(self, item):
+        newName = getOnlyText(_("New tag name:"),default=item.fullname)
+        newName = newName.replace('"', "")
+        if not newName or newName == item.fullname:
+            return
+        self.moveTag(item.fullname,newName)
+        mw.col.tags.registerNotes()
+
+    def _onTreeTagDelete(self, item):
+        self.moveTag(item.fullname,rename=False)
+        mw.col.tags.registerNotes()
+
+    def _onTreeFavDelete(self, item):
+        if askUser(_("Remove %s from your saved searches?") % item.fullname):
+            del mw.col.conf['savedFilters'][item.fullname]
+
+    def _onTreeFavRename(self, item):
+        newName = getOnlyText(_("New search name:"),default=item.fullname)
+        act=mw.col.conf['savedFilters'][item.fullname]
+        mw.col.conf['savedFilters'][newName]=act
+        del(mw.col.conf['savedFilters'][item.fullname])
+
+    def _onTreeModelRename(self, item):
+        self.browser.form.searchEdit.lineEdit().setText("")
+        model = mw.col.models.byName(item.fullname)
+        newName = getOnlyText(_("New model name:"),default=item.fullname)
+        model['name'] = newName
+        mw.col.models.save(model)
+        mw.col.models.flush()
+        self.browser.model.reset()
+
+    def _onTreeModelDelete(self, item):
+        self.browser.form.searchEdit.lineEdit().setText("")
+        model = mw.col.models.byName(item.fullname)
+        if mw.col.models.useCount(model):
+            msg = _("Delete this note type and all its cards?")
+        else:
+            msg = _("Delete this unused note type?")
+        if not askUser(msg, parent=self):
+            return
+        mw.col.models.rem(model)
+        model = None
+        mw.col.models.flush()
+        self.browser.setupTable()
+        self.browser.model.reset()
 

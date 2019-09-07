@@ -13,26 +13,30 @@ from operator import  itemgetter
 
 
 
-def favTree(self, root):
-    saved = self.col.conf.get('savedFilters', {})
+def favTree(browser, root):
+    saved = browser.col.conf.get('savedFilters', {})
     if not saved:
         return
-    root = self.CallbackItem(root, _("Searches"), None, expanded=True)
+    root = browser.CallbackItem(root, _("Searches"), None, expanded=True)
+    root.type = "group"
+    root.fullname = "fav"
+    root.setExpanded(browser.sidebarTree.node_state.get("group").get('fav',True))
     root.setIcon(0, QIcon(":/icons/heart.svg"))
-    root.setExpanded(True)
     for name, filt in sorted(saved.items()):
-        item = self.CallbackItem(root, name, lambda s=filt: self.setFilter(s))
+        item = browser.CallbackItem(root, name, lambda s=filt: browser.setFilter(s))
         item.type="fav"
         item.fullname = name
         item.setIcon(0, QIcon(":/icons/heart.svg"))
 
 
-def userTagTree(self, root):
-    root = self.CallbackItem(root, _("Tags"), None, expanded=True)
+def userTagTree(browser, root):
+    root = browser.CallbackItem(root, _("Tags"), None, expanded=True)
+    root.type = "group"
+    root.fullname = "tag"
+    root.setExpanded(browser.sidebarTree.node_state.get("group").get('tag',True))
     root.setIcon(0, QIcon(":/icons/tag.svg"))
-    root.setExpanded(True)
     tags_tree = {}
-    for t in sorted(self.col.tags.all(), key=lambda t: t.lower()):
+    for t in sorted(browser.col.tags.all(), key=lambda t: t.lower()):
         # if t.lower() == "marked" or t.lower() == "leech":
             # continue
         node = t.split('::')
@@ -44,10 +48,10 @@ def userTagTree(self, root):
                 else:
                     parent_tag = '::'.join(node[0:idx])
                     parent = tags_tree[parent_tag]
-                item = self.CallbackItem(
+                item = browser.CallbackItem(
                     parent, name,
-                    lambda p=leaf_tag: self.setFilter("tag",p),
-                    expanded=bool(len(node)>2)
+                    lambda p=leaf_tag: browser.setFilter("tag",p),
+                    expanded=browser.sidebarTree.node_state.get('tag').get(leaf_tag,False)
                 )
                 item.type = "tag"
                 item.fullname = leaf_tag
@@ -55,18 +59,20 @@ def userTagTree(self, root):
                 tags_tree[leaf_tag] = item
 
 
-def decksTree(self, root):
-    root = self.CallbackItem(root, _("Decks"), None, expanded=True)
+def decksTree(browser, root):
+    root = browser.CallbackItem(root, _("Decks"), None, expanded=True)
+    root.type = "group"
+    root.fullname = "deck"
+    root.setExpanded(browser.sidebarTree.node_state.get("group").get('deck',True))
     root.setIcon(0, QIcon(":/icons/deck.svg"))
-    root.setExpanded(True)
-    grps = self.col.sched.deckDueTree()
+    grps = browser.col.sched.deckDueTree()
     def fillGroups(root, grps, head=""):
         for g in grps:
-            item = self.CallbackItem(
+            item = browser.CallbackItem(
                 root, g[0],
-                lambda g=g: self.setFilter("deck", head+g[0]),
-                lambda g=g: self.mw.col.decks.collapseBrowser(g[1]),
-                not self.mw.col.decks.get(g[1]).get('browserCollapsed', False))
+                lambda g=g: browser.setFilter("deck", head+g[0]),
+                lambda g=g: browser.mw.col.decks.collapseBrowser(g[1]),
+                not browser.mw.col.decks.get(g[1]).get('browserCollapsed', False))
             item.type="deck"
             item.fullname = head + g[0]
             item.setIcon(0, QIcon(":/icons/deck.svg"))
@@ -76,13 +82,15 @@ def decksTree(self, root):
     fillGroups(root, grps)
 
 
-def modelTree(self, root):
-    root = self.CallbackItem(root, _("Models"), None)
+def modelTree(browser, root):
+    root = browser.CallbackItem(root, _("Models"), None)
+    root.type = "group"
+    root.fullname = "model"
+    root.setExpanded(browser.sidebarTree.node_state.get("group").get('model',False))
     root.setIcon(0, QIcon(":/icons/notetype.svg"))
-    root.setExpanded(False)
-    for m in sorted(self.col.models.all(), key=itemgetter("name")):
-        mitem = self.CallbackItem(
-            root, m['name'], lambda m=m: self.setFilter("note", m['name']))
+    for m in sorted(browser.col.models.all(), key=itemgetter("name")):
+        mitem = browser.CallbackItem(
+            root, m['name'], lambda m=m: browser.setFilter("note", m['name']))
         mitem.type="model"
         mitem.fullname = m['name']
         mitem.setIcon(0, QIcon(":/icons/notetype.svg"))
