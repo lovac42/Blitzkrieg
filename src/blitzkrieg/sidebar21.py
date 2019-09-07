@@ -10,7 +10,7 @@ import anki.find
 from aqt import mw
 from anki.lang import ngettext, _
 from aqt.qt import *
-from aqt.utils import getOnlyText, askUser, showWarning
+from aqt.utils import getOnlyText, askUser, showWarning, showInfo
 from anki.errors import DeckRenameError
 
 
@@ -19,6 +19,7 @@ class SidebarTreeWidget(QTreeWidget):
         #Decks are handled per deck settings
         'group': {},
         'tag': {},
+        'model': {},
     }
 
     def __init__(self):
@@ -49,7 +50,7 @@ class SidebarTreeWidget(QTreeWidget):
 
     def onTreeCollapse(self, item):
         if getattr(item, 'oncollapse', None):
-            item.oncollapse()
+            item.oncollapse() #decks only
             return
         try:
             exp = item.isExpanded()
@@ -63,44 +64,71 @@ class SidebarTreeWidget(QTreeWidget):
         self.dropItem = parent
         return True
 
+
     def dropEvent(self, event):
         dragItem = event.source().currentItem()
-        if dragItem.type not in ("tag","deck"):
+        if dragItem.type not in ("tag","deck","model"):
             event.setDropAction(Qt.IgnoreAction)
             event.accept()
             return
-
         QAbstractItemView.dropEvent(self, event)
         if not self.dropItem or self.dropItem.type == dragItem.type:
             dragName = dragItem.fullname
             try:
                 dropName = self.dropItem.fullname
             except AttributeError:
-                dropName = None
-
-            mw.checkpoint("Dragged "+dragItem.type)
+                dropName = None #no parent
+            self.mw.checkpoint("Dragged "+dragItem.type)
             parse=mw.col.decks #used for parsing '::' separators
-
             if dragItem.type == "deck":
-                dragDid = parse.byName(dragName)["id"]
-                dropDid = parse.byName(dropName)["id"] if dropName else None
-                try:
-                    parse.renameForDragAndDrop(dragDid,dropDid)
-                except DeckRenameError as e:
-                    showWarning(e.description)
-                mw.col.decks.get(dropDid)['browserCollapsed']=False
-
+                self._deckDropEvent(dragName,dropName)
             elif dragItem.type == "tag":
-                if dragName and not dropName:
-                    if len(parse._path(dragName)) > 1:
-                        self.moveTag(dragName, parse._basename(dragName))
-                elif parse._canDragAndDrop(dragName, dropName):
-                    assert dropName.strip()
-                    self.moveTag(dragName, dropName + "::" + parse._basename(dragName))
-                mw.col.tags.registerNotes()
-                self.node_state['tag'][dropName]=True
-
+                self._strDropEvent(dragName,dropName,self.moveTag)
+                self.node_state['tag'][dropName] = True
+            elif dragItem.type == "model":
+                self._strDropEvent(dragName,dropName,self.moveModel)
+                self.node_state['model'][dropName] = True
+        mw.col.setMod()
         self.browser.buildTree()
+
+
+    def _strDropEvent(self, dragName, dropName, callback):
+        parse=mw.col.decks #used for parsing '::' separators
+        if dragName and not dropName:
+            if len(parse._path(dragName)) > 1:
+                callback(dragName, parse._basename(dragName))
+        elif parse._canDragAndDrop(dragName, dropName):
+            assert dropName.strip()
+            callback(dragName, dropName + "::" + parse._basename(dragName))
+
+
+    def _deckDropEvent(self, dragName, dropName):
+        parse=mw.col.decks #used for parsing '::' separators
+        dragDid = parse.byName(dragName)["id"]
+        dropDid = parse.byName(dropName)["id"] if dropName else None
+        try:
+            parse=mw.col.decks #used for parsing '::' separators
+            parse.renameForDragAndDrop(dragDid,dropDid)
+        except DeckRenameError as e:
+            showWarning(e.description)
+        mw.col.decks.get(dropDid)['browserCollapsed'] = False
+
+
+    def moveModel(self, dragName, newName=""):
+        "Rename or Delete models"
+        self.browser.editor.saveNow(self.hideEditor)
+        for m in mw.col.models.all():
+            modelName=m['name']
+            if modelName.startswith(dragName + "::"):
+                m['name'] = modelName.replace(dragName+"::", newName+"::", 1)
+                mw.col.models.save(m)
+            elif modelName == dragName:
+                m['name'] = newName
+                mw.col.models.save(m)
+            self.node_state['model'][newName] = True
+        mw.col.models.flush()
+        self.browser.model.reset()
+
 
     def moveTag(self, dragName, newName="", rename=True):
         "Rename or Delete tag"
@@ -122,11 +150,12 @@ class SidebarTreeWidget(QTreeWidget):
             self.node_state['tag'][newName]=True
         mw.col.tags.bulkRem(ids,dragName)
         mw.col.tags.flush()
-
+        mw.col.tags.registerNotes()
 
     def hideEditor(self):
         self.browser.editor.setNote(None)
         self.browser.singleCard=False
+
 
     def onTreeMenu(self, pos):
         item=self.currentItem()
@@ -161,9 +190,12 @@ class SidebarTreeWidget(QTreeWidget):
             act.triggered.connect(lambda:
                 self._onTreeItemAction(item,"Delete",self._onTreeFavDelete))
         elif item.type == "model":
-            act = m.addAction("Rename")
+            act = m.addAction("Rename Leaf")
             act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Rename",self._onTreeModelRename))
+                self._onTreeItemAction(item,"Rename",self._onTreeModelRenameLeaf))
+            act = m.addAction("Rename Branch")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Rename",self._onTreeModelRenameBranch))
             act = m.addAction("Delete")
             act.triggered.connect(lambda:
                 self._onTreeItemAction(item,"Delete",self._onTreeModelDelete))
@@ -208,7 +240,6 @@ class SidebarTreeWidget(QTreeWidget):
         oldNameArr[-1] = newName
         newName = "::".join(oldNameArr)
         self.moveTag(item.fullname,newName)
-        mw.col.tags.registerNotes()
 
     def _onTreeTagRenameBranch(self, item):
         newName = getOnlyText(_("New tag name:"),default=item.fullname)
@@ -216,11 +247,9 @@ class SidebarTreeWidget(QTreeWidget):
         if not newName or newName == item.fullname:
             return
         self.moveTag(item.fullname,newName)
-        mw.col.tags.registerNotes()
 
     def _onTreeTagDelete(self, item):
         self.moveTag(item.fullname,rename=False)
-        mw.col.tags.registerNotes()
 
     def _onTreeFavDelete(self, item):
         if askUser(_("Remove %s from your saved searches?") % item.fullname):
@@ -232,18 +261,32 @@ class SidebarTreeWidget(QTreeWidget):
         mw.col.conf['savedFilters'][newName]=act
         del(mw.col.conf['savedFilters'][item.fullname])
 
-    def _onTreeModelRename(self, item):
+    def _onTreeModelRenameLeaf(self, item):
+        self.browser.form.searchEdit.lineEdit().setText("")
+        oldNameArr = item.fullname.split("::")
+        newName = getOnlyText(_("New model name:"),default=oldNameArr[-1])
+        newName = newName.replace('"', "")
+        if not newName or newName == oldNameArr[-1]:
+            return
+        oldNameArr[-1] = newName
+        newName = "::".join(oldNameArr)
+        self.moveModel(item.fullname,newName)
+
+    def _onTreeModelRenameBranch(self, item):
         self.browser.form.searchEdit.lineEdit().setText("")
         model = mw.col.models.byName(item.fullname)
         newName = getOnlyText(_("New model name:"),default=item.fullname)
-        model['name'] = newName
-        mw.col.models.save(model)
-        mw.col.models.flush()
-        self.browser.model.reset()
+        newName = newName.replace('"', "")
+        if not newName or newName == item.fullname:
+            return
+        self.moveModel(item.fullname,newName)
 
     def _onTreeModelDelete(self, item):
         self.browser.form.searchEdit.lineEdit().setText("")
         model = mw.col.models.byName(item.fullname)
+        if not model:
+            showInfo("This is just a pathname")
+            return
         if mw.col.models.useCount(model):
             msg = _("Delete this note type and all its cards?")
         else:

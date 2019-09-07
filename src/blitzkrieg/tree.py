@@ -37,17 +37,13 @@ def userTagTree(browser, root):
     root.setIcon(0, QIcon(":/icons/tag.svg"))
     tags_tree = {}
     for t in sorted(browser.col.tags.all(), key=lambda t: t.lower()):
-        # if t.lower() == "marked" or t.lower() == "leech":
-            # continue
+        if t.lower() == "marked" or t.lower() == "leech":
+            continue
         node = t.split('::')
         for idx, name in enumerate(node):
             leaf_tag = '::'.join(node[0:idx + 1])
             if not tags_tree.get(leaf_tag):
-                if idx == 0:
-                    parent = root
-                else:
-                    parent_tag = '::'.join(node[0:idx])
-                    parent = tags_tree[parent_tag]
+                parent = tags_tree['::'.join(node[0:idx])] if idx else root
                 item = browser.CallbackItem(
                     parent, name,
                     lambda p=leaf_tag: browser.setFilter("tag",p),
@@ -88,10 +84,19 @@ def modelTree(browser, root):
     root.fullname = "model"
     root.setExpanded(browser.sidebarTree.node_state.get("group").get('model',False))
     root.setIcon(0, QIcon(":/icons/notetype.svg"))
+    models_tree = {}
     for m in sorted(browser.col.models.all(), key=itemgetter("name")):
-        mitem = browser.CallbackItem(
-            root, m['name'], lambda m=m: browser.setFilter("note", m['name']))
-        mitem.type="model"
-        mitem.fullname = m['name']
-        mitem.setIcon(0, QIcon(":/icons/notetype.svg"))
-
+        node = m['name'].split('::')
+        for idx, name in enumerate(node):
+            leaf_model = '::'.join(node[0:idx + 1])
+            if not models_tree.get(leaf_model):
+                parent = models_tree['::'.join(node[0:idx])] if idx else root
+                item = browser.CallbackItem(
+                    parent, name,
+                    lambda m=m: browser.setFilter("mid", str(m['id'])),
+                    expanded=browser.sidebarTree.node_state.get('model').get(leaf_model,False)
+                )
+                item.type = "model"
+                item.fullname = leaf_model
+                item.setIcon(0, QIcon(":/icons/notetype.svg"))
+                models_tree[leaf_model] = item
