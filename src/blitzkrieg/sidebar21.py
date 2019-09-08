@@ -426,7 +426,7 @@ class SidebarTreeWidget(QTreeWidget):
             mw.col.conf['savedFilters'][item.fullname]=act
 
     def _onTreeModelRenameLeaf(self, item):
-        self.browser.form.searchEdit.lineEdit().setText("")
+        self.browser._lastSearchTxt=""
         oldNameArr = item.fullname.split("::")
         newName = getOnlyText(_("New model name:"),default=oldNameArr[-1])
         newName = newName.replace('"', "")
@@ -437,7 +437,7 @@ class SidebarTreeWidget(QTreeWidget):
         self.moveModel(item.fullname,newName)
 
     def _onTreeModelRenameBranch(self, item):
-        self.browser.form.searchEdit.lineEdit().setText("")
+        self.browser._lastSearchTxt=""
         model = mw.col.models.byName(item.fullname)
         newName = getOnlyText(_("New model name:"),default=item.fullname)
         newName = newName.replace('"', "")
@@ -446,7 +446,7 @@ class SidebarTreeWidget(QTreeWidget):
         self.moveModel(item.fullname,newName)
 
     def _onTreeModelDelete(self, item):
-        self.browser.form.searchEdit.lineEdit().setText("")
+        self.browser._lastSearchTxt=""
         model = mw.col.models.byName(item.fullname)
         if not model:
             showInfo("This is just a pathname")
