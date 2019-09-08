@@ -5,12 +5,14 @@
 # Support: https://github.com/lovac42/Blitzkrieg
 
 
+import re
 import anki.find
 from aqt import mw
 from anki.lang import ngettext, _
 from aqt.qt import *
 from aqt.utils import getOnlyText, askUser, showWarning, showInfo
 from anki.errors import DeckRenameError
+from anki.hooks import addHook
 
 
 class SidebarTreeWidget(QTreeWidget):
@@ -36,6 +38,14 @@ class SidebarTreeWidget(QTreeWidget):
 
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.onTreeMenu)
+
+        addHook("revertedState", self.onRevertedState)
+
+    def onRevertedState(self, stateName):
+        # Not OOP, but I have no where to access the ref to the browser...
+        if re.search(r"([Dd]eck|tag|fav|model)$",stateName):
+            # the "Deck" tag is set by anki, not this addon
+            self.browser.buildTree()
 
     def keyPressEvent(self, evt):
         if evt.key() in (Qt.Key_Return, Qt.Key_Enter):
