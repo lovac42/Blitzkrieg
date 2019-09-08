@@ -3,7 +3,7 @@
 
 ## Screenshots:
 
-<img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/browser.png?raw=true">  
+<img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/demo.gif?raw=true">  
 
 
 ## Credits:
