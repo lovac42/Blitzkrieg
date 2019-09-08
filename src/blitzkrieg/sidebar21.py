@@ -215,6 +215,10 @@ class SidebarTreeWidget(QTreeWidget):
             act = m.addAction("Delete")
             act.triggered.connect(lambda:
                 self._onTreeItemAction(item,"Delete",self._onTreeTagDelete))
+            m.addSeparator()
+            act = m.addAction("Convert to decks")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Delete",self._onTreeTag2Deck))
         elif item.type == "fav":
             act = m.addAction("Rename")
             act.triggered.connect(lambda:
@@ -253,18 +257,21 @@ class SidebarTreeWidget(QTreeWidget):
         deck = getOnlyText(_("Name for deck:"),default=item.fullname+"::")
         if deck:
             mw.col.decks.id(deck)
+        mw.col.decks.flush()
         self.mw.reset(True)
 
     def _onTreeDeckDelete(self, item):
         self.browser._lastSearchTxt=""
         did=mw.col.decks.byName(item.fullname)["id"]
         mw.deckBrowser._delete(did)
+        mw.col.decks.flush()
         mw.reset(True)
 
     def _onTreeDeckRename(self, item):
         self.browser._lastSearchTxt=""
         did=mw.col.decks.byName(item.fullname)["id"]
         mw.deckBrowser._rename(did)
+        mw.col.decks.flush()
         mw.reset(True)
 
     def _onTreeTagRenameLeaf(self, item):
@@ -292,13 +299,11 @@ class SidebarTreeWidget(QTreeWidget):
         if not askUser(msg, parent=self, defaultno=True):
             return
 
-        self.browser._lastSearchTxt=""
-        self.browser.editor.saveNow(self.hideEditor)
-
         f = anki.find.Finder(mw.col)
+        self.browser.editor.saveNow(self.hideEditor)
         itemDid=mw.col.decks.byName(item.fullname)["id"]
         actv=mw.col.decks.children(itemDid)
-        actv.append((item.fullname,itemDid))
+        actv.insert(0,(item.fullname,itemDid))
 
         self.mw.checkpoint("Convert %s to tag"%item.type)
         for name,did in actv:
@@ -314,13 +319,44 @@ class SidebarTreeWidget(QTreeWidget):
             )
 
         #prevent runons due to random sorting
-        actv.pop()
+        actv.pop(0)
         for name,did in actv:
             mw.col.decks.rem(did)
-
+        mw.col.decks.flush()
         mw.col.tags.flush()
         mw.col.tags.registerNotes()
         self.mw.requireReset()
+        self.browser.onReset()
+
+
+    def _onTreeTag2Deck(self, item):
+        def tag2Deck(tag):
+            did = mw.col.decks.id(tag)
+            cids = f.findCards("tag:"+tag)
+            mw.col.sched.remFromDyn(cids)
+            mw.col.db.execute(
+                "update cards set usn=?, mod=?, did=? where id in %s"%ids2str(cids),
+                mw.col.usn(), intTime(), did
+            )
+            nids = f.findNotes("tag:"+tag)
+            mw.col.tags.bulkRem(nids,tag)
+
+        msg = _("Convert all tags to deck structure?")
+        if not askUser(msg, parent=self, defaultno=True):
+            return
+
+        f = anki.find.Finder(mw.col)
+        self.browser.editor.saveNow(self.hideEditor)
+        parent = item.fullname
+        tag2Deck(parent)
+        for tag in mw.col.tags.all():
+            if tag.startswith(parent + "::"):
+                tag2Deck(tag)
+        mw.col.decks.flush()
+        mw.col.tags.flush()
+        mw.col.tags.registerNotes()
+        self.mw.requireReset()
+        self.browser.onReset()
 
 
     def _onTreeFavDelete(self, item):
