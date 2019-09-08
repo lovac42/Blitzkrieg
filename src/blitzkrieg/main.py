@@ -6,15 +6,21 @@
 # Support: https://github.com/lovac42/Blitzkrieg
 
 
+import re
 from aqt import mw
 from aqt.qt import *
 from aqt.browser import Browser
+from anki.hooks import addHook
 
 from .sidebar21 import SidebarTreeWidget
 from .tree import *
 
 
+browserInstance=None
+
 def replace_buildTree(self):
+    global browserInstance
+    browserInstance = self
     self.sidebarTree.browser = self
     self.sidebarTree.clear()
     root = self.sidebarTree
@@ -28,4 +34,10 @@ def replace_buildTree(self):
 
 Browser.SidebarTreeWidget = SidebarTreeWidget
 Browser.buildTree = replace_buildTree
+
+
+def onRevertedState(stateName):
+    if re.search(r"([Dd]eck|tag|fav|model)$",stateName):
+        browserInstance.buildTree()
+addHook("revertedState", onRevertedState)
 
