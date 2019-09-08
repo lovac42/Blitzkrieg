@@ -17,16 +17,22 @@ def favTree(browser, root):
     saved = browser.col.conf.get('savedFilters', {})
     if not saved:
         return
-    root = browser.CallbackItem(root, _("Searches"), None, expanded=True)
-    root.type = "group"
-    root.fullname = "fav"
-    root.setExpanded(browser.sidebarTree.node_state.get("group").get('fav',True))
-    root.setIcon(0, QIcon(":/icons/heart.svg"))
-    for name, filt in sorted(saved.items()):
-        item = browser.CallbackItem(root, name, lambda s=filt: browser.setFilter(s))
-        item.type="fav"
-        item.fullname = name
-        item.setIcon(0, QIcon(":/icons/heart.svg"))
+    favs_tree = {}
+    for fav, filt in sorted(saved.items()):
+        node = fav.split('::')
+        for idx, name in enumerate(node):
+            leaf_tag = '::'.join(node[0:idx + 1])
+            if not favs_tree.get(leaf_tag):
+                parent = favs_tree['::'.join(node[0:idx])] if idx else root
+                item = browser.CallbackItem(
+                    parent, name,
+                    lambda s=filt: browser.setFilter(s),
+                    expanded=browser.sidebarTree.node_state.get('fav').get(leaf_tag,True)
+                )
+                item.type = "fav"
+                item.fullname = leaf_tag
+                item.setIcon(0, QIcon(":/icons/heart.svg"))
+                favs_tree[leaf_tag] = item
 
 
 def userTagTree(browser, root):
