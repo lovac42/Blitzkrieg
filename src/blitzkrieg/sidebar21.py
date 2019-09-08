@@ -13,7 +13,7 @@ from aqt.qt import *
 from aqt.utils import getOnlyText, askUser, showWarning, showInfo
 from anki.utils import intTime, ids2str
 from anki.errors import DeckRenameError
-from anki.hooks import addHook, runHook
+from anki.hooks import runHook
 
 
 class SidebarTreeWidget(QTreeWidget):
@@ -39,14 +39,6 @@ class SidebarTreeWidget(QTreeWidget):
 
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.onTreeMenu)
-
-        addHook("revertedState", self.onRevertedState)
-
-    def onRevertedState(self, stateName):
-        # Not OOP, but I have no where to access the ref to the browser...
-        if re.search(r"([Dd]eck|tag|fav|model)$",stateName):
-            # the "Deck" tag is set by anki, not this addon
-            self.browser.buildTree()
 
     def keyPressEvent(self, evt):
         if evt.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -146,6 +138,7 @@ class SidebarTreeWidget(QTreeWidget):
     def moveModel(self, dragName, newName=""):
         "Rename or Delete models"
         self.browser.editor.saveNow(self.hideEditor)
+        self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
         for m in mw.col.models.all():
             modelName=m['name']
             if modelName.startswith(dragName + "::"):
@@ -157,11 +150,13 @@ class SidebarTreeWidget(QTreeWidget):
             self.node_state['model'][newName] = True
         mw.col.models.flush()
         self.browser.model.reset()
+        self.browser.setupHooks()
 
 
     def moveTag(self, dragName, newName="", rename=True):
         "Rename or Delete tag"
         self.browser.editor.saveNow(self.hideEditor)
+        self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
         f = anki.find.Finder(mw.col)
         # rename children
         for tag in mw.col.tags.all():
@@ -172,6 +167,7 @@ class SidebarTreeWidget(QTreeWidget):
                     mw.col.tags.bulkAdd(ids,nn)
                     self.node_state['tag'][nn]=True
                 mw.col.tags.bulkRem(ids,tag)
+                self.mw.progress.update(label=tag)
         # rename parent
         ids = f.findNotes("tag:"+dragName)
         if rename:
@@ -180,6 +176,7 @@ class SidebarTreeWidget(QTreeWidget):
         mw.col.tags.bulkRem(ids,dragName)
         mw.col.tags.flush()
         mw.col.tags.registerNotes()
+        self.browser.setupHooks()
 
     def hideEditor(self):
         self.browser.editor.setNote(None)
@@ -192,19 +189,37 @@ class SidebarTreeWidget(QTreeWidget):
             return
         m = QMenu(self)
         if item.type == "deck":
-            act = m.addAction("Add")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Add",self._onTreeDeckAdd))
+
+            sel = mw.col.decks.byName(item.fullname)
+            if sel['dyn']:
+                act = m.addAction("Empty")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Empty",self._onTreeDeckEmpty))
+                act = m.addAction("Rebuild")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Rebuild",self._onTreeDeckRebuild))
+            else:
+                act = m.addAction("Add")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Add",self._onTreeDeckAdd))
+
             act = m.addAction("Rename")
             act.triggered.connect(lambda:
                 self._onTreeItemAction(item,"Rename",self._onTreeDeckRename))
+            act = m.addAction("Options")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Options",self._onTreeDeckOptions))
+            act = m.addAction("Export")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Export",self._onTreeDeckExport))
             act = m.addAction("Delete")
             act.triggered.connect(lambda:
                 self._onTreeItemAction(item,"Delete",self._onTreeDeckDelete))
             m.addSeparator()
             act = m.addAction("Convert to tags")
             act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Delete",self._onTreeDeck2Tag))
+                self._onTreeItemAction(item,"Convert",self._onTreeDeck2Tag))
+
         elif item.type == "tag":
             act = m.addAction("Rename Leaf")
             act.triggered.connect(lambda:
@@ -218,7 +233,8 @@ class SidebarTreeWidget(QTreeWidget):
             m.addSeparator()
             act = m.addAction("Convert to decks")
             act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Delete",self._onTreeTag2Deck))
+                self._onTreeItemAction(item,"Convert",self._onTreeTag2Deck))
+
         elif item.type == "fav":
             act = m.addAction("Rename")
             act.triggered.connect(lambda:
@@ -229,6 +245,7 @@ class SidebarTreeWidget(QTreeWidget):
             act = m.addAction("Delete")
             act.triggered.connect(lambda:
                 self._onTreeItemAction(item,"Delete",self._onTreeFavDelete))
+
         elif item.type == "model":
             act = m.addAction("Rename Leaf")
             act.triggered.connect(lambda:
@@ -247,30 +264,58 @@ class SidebarTreeWidget(QTreeWidget):
     def _onTreeItemAction(self, item, action, callback):
         self.browser.editor.saveNow(self.hideEditor)
         mw.checkpoint(action+" "+item.type)
-        callback(item)
-        mw.col.setMod()
-        self.browser.buildTree()
+        self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
+        self.mw.progress.start(label="Sidebar Action")
+        try:
+            callback(item)
+        finally:
+            self.mw.progress.finish()
+            mw.col.setMod()
+            self.browser.setupHooks()
+            self.browser.onReset()
+            self.browser.buildTree()
+
+
+    def _onTreeDeckEmpty(self, item):
+        self.browser._lastSearchTxt=""
+        sel = mw.col.decks.byName(item.fullname)
+        mw.col.sched.emptyDyn(sel['id'])
+        self.mw.reset()
+
+    def _onTreeDeckRebuild(self, item):
+        sel = mw.col.decks.byName(item.fullname)
+        mw.col.sched.rebuildDyn(sel['id'])
+        self.mw.reset()
+
+    def _onTreeDeckOptions(self, item):
+        sel = mw.col.decks.byName(item.fullname)
+        self.mw.col.decks.select(sel['id'])
+        self.mw.onDeckConf()
+        self.mw.reset(True)
+
+    def _onTreeDeckExport(self, item):
+        sel = mw.col.decks.byName(item.fullname)
+        self.mw.onExport(did=sel['id'])
+        self.mw.reset(True)
 
     def _onTreeDeckAdd(self, item):
-        self.browser._lastSearchTxt=""
-        did=mw.col.decks.byName(item.fullname)["id"]
         deck = getOnlyText(_("Name for deck:"),default=item.fullname+"::")
         if deck:
             mw.col.decks.id(deck)
-        mw.col.decks.flush()
-        self.mw.reset(True)
+            mw.col.decks.flush()
+            self.mw.reset(True)
 
     def _onTreeDeckDelete(self, item):
         self.browser._lastSearchTxt=""
-        did=mw.col.decks.byName(item.fullname)["id"]
-        mw.deckBrowser._delete(did)
+        sel=mw.col.decks.byName(item.fullname)
+        mw.deckBrowser._delete(sel['id'])
         mw.col.decks.flush()
         mw.reset(True)
 
     def _onTreeDeckRename(self, item):
         self.browser._lastSearchTxt=""
-        did=mw.col.decks.byName(item.fullname)["id"]
-        mw.deckBrowser._rename(did)
+        sel=mw.col.decks.byName(item.fullname)
+        mw.deckBrowser._rename(sel['id'])
         mw.col.decks.flush()
         mw.reset(True)
 
@@ -300,33 +345,33 @@ class SidebarTreeWidget(QTreeWidget):
             return
 
         f = anki.find.Finder(mw.col)
-        self.browser.editor.saveNow(self.hideEditor)
-        itemDid=mw.col.decks.byName(item.fullname)["id"]
-        actv=mw.col.decks.children(itemDid)
-        actv.insert(0,(item.fullname,itemDid))
+        parentDid = mw.col.decks.byName(item.fullname)["id"]
+        actv = mw.col.decks.children(parentDid)
+        actv = sorted(actv, key=lambda t: t[0])
+        actv.insert(0,(item.fullname,parentDid))
 
         self.mw.checkpoint("Convert %s to tag"%item.type)
         for name,did in actv:
+            #add subdeck tree structure as tags
             nids = f.findNotes('''"deck:%s" -"deck:%s::*"'''%(name,name))
             tagName = re.sub(r"\s*(::)?\s*","\g<1>",name)
             mw.col.tags.bulkAdd(nids, tagName)
-
-            cids = mw.col.db.list("select id from cards where (did=? or odid=?)", did, did)
-            mw.col.sched.remFromDyn(cids)
+            #skip parent or dyn decks
+            if did == parentDid or mw.col.decks.get(did)['dyn']:
+                continue
+            #collapse subdecks into one
+            mw.col.sched.emptyDyn(None, "odid=%d"%did)
             mw.col.db.execute(
-                "update cards set usn=?, mod=?, did=? where id in %s"%ids2str(cids),
-                mw.col.usn(), intTime(), itemDid
+                "update cards set usn=?, mod=?, did=? where did=?",
+                mw.col.usn(), intTime(), parentDid, did
             )
+            mw.col.decks.rem(did,childrenToo=False)
+            self.mw.progress.update(label=name)
 
-        #prevent runons due to random sorting
-        actv.pop(0)
-        for name,did in actv:
-            mw.col.decks.rem(did)
         mw.col.decks.flush()
         mw.col.tags.flush()
         mw.col.tags.registerNotes()
         self.mw.requireReset()
-        self.browser.onReset()
 
 
     def _onTreeTag2Deck(self, item):
@@ -340,6 +385,7 @@ class SidebarTreeWidget(QTreeWidget):
             )
             nids = f.findNotes("tag:"+tag)
             mw.col.tags.bulkRem(nids,tag)
+            self.mw.progress.update(label=tag)
 
         msg = _("Convert all tags to deck structure?")
         if not askUser(msg, parent=self, defaultno=True):
@@ -356,7 +402,6 @@ class SidebarTreeWidget(QTreeWidget):
         mw.col.tags.flush()
         mw.col.tags.registerNotes()
         self.mw.requireReset()
-        self.browser.onReset()
 
 
     def _onTreeFavDelete(self, item):
