@@ -185,12 +185,15 @@ class SidebarTreeWidget(QTreeWidget):
 
 
     def onTreeMenu(self, pos):
-        item=self.currentItem()
-        if not item or item.type in ("sys","group"):
-            return
         m = QMenu(self)
-        if item.type == "deck":
+        item=self.currentItem()
+        if not item:
+            return
 
+        if item.type in ("sys","group"):
+            pass #skip
+
+        elif item.type == "deck":
             sel = mw.col.decks.byName(item.fullname)
             if sel['dyn']:
                 act = m.addAction("Empty")
@@ -237,15 +240,17 @@ class SidebarTreeWidget(QTreeWidget):
                 self._onTreeItemAction(item,"Convert",self._onTreeTag2Deck))
 
         elif item.type == "fav":
-            act = m.addAction("Rename")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Rename",self._onTreeFavRename))
-            act = m.addAction("Modify")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Rename",self._onTreeFavModify))
-            act = m.addAction("Delete")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Delete",self._onTreeFavDelete))
+            sel = mw.col.conf['savedFilters'].get(item.fullname)
+            if sel:
+                act = m.addAction("Rename")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Rename",self._onTreeFavRename))
+                act = m.addAction("Modify")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Rename",self._onTreeFavModify))
+                act = m.addAction("Delete")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Delete",self._onTreeFavDelete))
 
         elif item.type == "model":
             act = m.addAction("Rename Leaf")
@@ -254,9 +259,11 @@ class SidebarTreeWidget(QTreeWidget):
             act = m.addAction("Rename Branch")
             act.triggered.connect(lambda:
                 self._onTreeItemAction(item,"Rename",self._onTreeModelRenameBranch))
-            act = m.addAction("Delete")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Delete",self._onTreeModelDelete))
+            if mw.col.models.byName(item.fullname):
+                #Not just a pathname
+                act = m.addAction("Delete")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Delete",self._onTreeModelDelete))
 
         runHook("Blitzkrieg.treeMenu", self, item, m)
         m.popup(QCursor.pos())
@@ -290,8 +297,7 @@ class SidebarTreeWidget(QTreeWidget):
 
     def _onTreeDeckOptions(self, item):
         sel = mw.col.decks.byName(item.fullname)
-        self.mw.col.decks.select(sel['id'])
-        self.mw.onDeckConf()
+        self.mw.onDeckConf(sel)
         self.mw.reset(True)
 
     def _onTreeDeckExport(self, item):
@@ -457,7 +463,6 @@ class SidebarTreeWidget(QTreeWidget):
         self.browser._lastSearchTxt=""
         model = mw.col.models.byName(item.fullname)
         if not model:
-            showInfo("This is just a pathname")
             return
         if mw.col.models.useCount(model):
             msg = _("Delete this note type and all its cards?")
