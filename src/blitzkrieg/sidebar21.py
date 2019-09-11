@@ -190,8 +190,13 @@ class SidebarTreeWidget(QTreeWidget):
         if not item:
             return
 
-        if item.type in ("sys","group"):
+        if item.type == "sys":
             pass #skip
+
+        elif item.type == "group":
+            if item.fullname == "model":
+                act = m.addAction("Manage Model")
+                act.triggered.connect(self.onManageModel)
 
         elif item.type == "deck":
             sel = mw.col.decks.byName(item.fullname)
@@ -253,6 +258,9 @@ class SidebarTreeWidget(QTreeWidget):
                     self._onTreeItemAction(item,"Delete",self._onTreeFavDelete))
 
         elif item.type == "model":
+            act = m.addAction("Add Model")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Add",self._onTreeModelAdd))
             act = m.addAction("Rename Leaf")
             act.triggered.connect(lambda:
                 self._onTreeItemAction(item,"Rename",self._onTreeModelRenameLeaf))
@@ -261,6 +269,12 @@ class SidebarTreeWidget(QTreeWidget):
                 self._onTreeItemAction(item,"Rename",self._onTreeModelRenameBranch))
             if mw.col.models.byName(item.fullname):
                 #Not just a pathname
+                act = m.addAction("Edit Fields")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Edit",self.onTreeModelFields))
+                act = m.addAction("LaTeX Options")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Edit",self.onTreeModelOptions))
                 act = m.addAction("Delete")
                 act.triggered.connect(lambda:
                     self._onTreeItemAction(item,"Delete",self._onTreeModelDelete))
@@ -479,3 +493,54 @@ class SidebarTreeWidget(QTreeWidget):
         mw.col.models.flush()
         self.browser.setupTable()
         self.browser.model.reset()
+
+    def _onTreeModelAdd(self, item):
+        from aqt.models import AddModel
+        self.browser.form.searchEdit.lineEdit().setText("")
+        m = AddModel(self.mw, self.browser).get()
+        if m:
+            #model is created regardless
+            txt = getOnlyText(_("Name:"), default=item.fullname+'::')
+            if txt:
+                m['name'] = txt
+            mw.col.models.ensureNameUnique(m)
+            mw.col.models.save(m)
+
+    def onTreeModelFields(self, item):
+        from aqt.fields import FieldDialog
+        model = mw.col.models.byName(item.fullname)
+        mw.col.models.setCurrent(model)
+        n = mw.col.newNote(forDeck=False)
+        for name in list(n.keys()):
+            n[name] = "("+name+")"
+        try:
+            if "{{cloze:Text}}" in model['tmpls'][0]['qfmt']:
+                n['Text'] = _("This is a {{c1::sample}} cloze deletion.")
+        except:
+            # invalid cloze
+            pass
+        FieldDialog(self.mw, n, parent=self.browser)
+
+    def onTreeModelOptions(self, item):
+        from aqt.forms import modelopts
+        model = mw.col.models.byName(item.fullname)
+        d = QDialog(self)
+        frm = modelopts.Ui_Dialog()
+        frm.setupUi(d)
+        frm.latexHeader.setText(model['latexPre'])
+        frm.latexFooter.setText(model['latexPost'])
+        d.setWindowTitle(_("Options for %s") % model['name'])
+        d.exec_()
+        model['latexPre'] = str(frm.latexHeader.toPlainText())
+        model['latexPost'] = str(frm.latexFooter.toPlainText())
+        mw.col.models.save()
+        mw.col.models.flush()
+
+    def onManageModel(self):
+        self.browser.editor.saveNow(self.hideEditor)
+        self.mw.checkpoint("Manage model")
+        import aqt.models
+        aqt.models.Models(self.mw, self.browser)
+        mw.col.setMod()
+        self.browser.onReset()
+        self.browser.buildTree()
