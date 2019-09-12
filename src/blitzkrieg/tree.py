@@ -79,16 +79,17 @@ def decksTree(browser, root):
                 lambda g=g: browser.setFilter("deck", head+g[0]),
                 lambda g=g: browser.mw.col.decks.collapseBrowser(g[1]),
                 not browser.mw.col.decks.get(g[1]).get('browserCollapsed', False))
-            item.type="deck"
             item.fullname = head + g[0]
             item.setIcon(0, QIcon(":/icons/deck.svg"))
-            if browser.sidebarTree.marked['deck'].get(item.fullname, False):
-                item.setBackground(0, QBrush(Qt.yellow))
             if mw.col.decks.byName(item.fullname)['dyn']:
                 item.setForeground(0, QBrush(Qt.blue))
+                item.type = "dyn"
+            else:
+                item.type = "deck"
+            if browser.sidebarTree.marked[item.type].get(item.fullname, False):
+                item.setBackground(0, QBrush(Qt.yellow))
             newhead = head + g[0]+"::"
             fillGroups(item, g[5], newhead)
-            # item.setExpanded(bool(len(grps)<2))
     fillGroups(root, grps)
 
 
