@@ -52,16 +52,19 @@ def userTagTree(browser, root):
             leaf_tag = '::'.join(node[0:idx + 1])
             if not tags_tree.get(leaf_tag):
                 parent = tags_tree['::'.join(node[0:idx])] if idx else root
+                exp = browser.sidebarTree.node_state.get('tag').get(leaf_tag,False)
                 item = browser.CallbackItem(
                     parent, name,
                     lambda p=leaf_tag: browser.setFilter("tag",p),
-                    expanded=browser.sidebarTree.node_state.get('tag').get(leaf_tag,False)
+                    expanded=exp
                 )
                 item.type = "tag"
                 item.fullname = leaf_tag
                 item.setIcon(0, QIcon(":/icons/tag.svg"))
                 if browser.sidebarTree.marked['tag'].get(leaf_tag, False):
                     item.setBackground(0, QBrush(Qt.yellow))
+                elif exp and '::' not in leaf_tag:
+                    item.setBackground(0, QBrush(QColor(0,0,10,10)))
                 tags_tree[leaf_tag] = item
 
 

@@ -55,6 +55,7 @@ class SidebarTreeWidget(QTreeWidget):
             item.onclick()
 
     def onTreeCollapse(self, item):
+        """Decks do not call this method"""
         if getattr(item, 'oncollapse', None):
             item.oncollapse() #decks only
             return
@@ -62,6 +63,13 @@ class SidebarTreeWidget(QTreeWidget):
             exp = item.isExpanded()
             self.node_state[item.type][item.fullname] = exp
         except: pass #item type is a deck, which is handled elsewhere
+
+        if item.type == 'tag' and '::' not in item.fullname:
+            if exp:
+                item.setBackground(0, QBrush(QColor(0,0,10,10)))
+            else:
+                item.setBackground(0, QBrush(Qt.transparent))
+
 
     def dropMimeData(self, parent, row, data, action):
         # Dealing with qt serialized data is a headache,
