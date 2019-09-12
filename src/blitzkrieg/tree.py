@@ -32,6 +32,8 @@ def favTree(browser, root):
                 item.type = "fav"
                 item.fullname = leaf_tag
                 item.setIcon(0, QIcon(":/icons/heart.svg"))
+                if browser.sidebarTree.marked['fav'].get(leaf_tag, False):
+                    item.setBackground(0, QBrush(Qt.yellow))
                 favs_tree[leaf_tag] = item
 
 
@@ -58,6 +60,8 @@ def userTagTree(browser, root):
                 item.type = "tag"
                 item.fullname = leaf_tag
                 item.setIcon(0, QIcon(":/icons/tag.svg"))
+                if browser.sidebarTree.marked['tag'].get(leaf_tag, False):
+                    item.setBackground(0, QBrush(Qt.yellow))
                 tags_tree[leaf_tag] = item
 
 
@@ -78,6 +82,10 @@ def decksTree(browser, root):
             item.type="deck"
             item.fullname = head + g[0]
             item.setIcon(0, QIcon(":/icons/deck.svg"))
+            if browser.sidebarTree.marked['deck'].get(item.fullname, False):
+                item.setBackground(0, QBrush(Qt.yellow))
+            if mw.col.decks.byName(item.fullname)['dyn']:
+                item.setForeground(0, QBrush(Qt.blue))
             newhead = head + g[0]+"::"
             fillGroups(item, g[5], newhead)
             # item.setExpanded(bool(len(grps)<2))
@@ -105,4 +113,6 @@ def modelTree(browser, root):
                 item.type = "model"
                 item.fullname = leaf_model
                 item.setIcon(0, QIcon(":/icons/notetype.svg"))
+                if browser.sidebarTree.marked['model'].get(leaf_model, False):
+                    item.setBackground(0, QBrush(Qt.yellow))
                 models_tree[leaf_model] = item

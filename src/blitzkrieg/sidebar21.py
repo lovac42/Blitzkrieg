@@ -19,10 +19,11 @@ from anki.hooks import runHook
 class SidebarTreeWidget(QTreeWidget):
     node_state = { # True for open, False for closed
         #Decks are handled per deck settings
-        'group': {},
-        'tag': {},
-        'fav': {},
-        'model': {},
+        'group': {}, 'tag': {}, 'fav': {}, 'model': {},
+    }
+
+    marked = {
+        'group': {}, 'fav': {}, 'deck': {}, 'model': {}, 'tag': {},
     }
 
     def __init__(self):
@@ -185,11 +186,11 @@ class SidebarTreeWidget(QTreeWidget):
 
 
     def onTreeMenu(self, pos):
-        m = QMenu(self)
         item=self.currentItem()
         if not item:
             return
 
+        m = QMenu(self)
         if item.type == "sys":
             pass #skip
 
@@ -278,6 +279,17 @@ class SidebarTreeWidget(QTreeWidget):
                 act = m.addAction("Delete")
                 act.triggered.connect(lambda:
                     self._onTreeItemAction(item,"Delete",self._onTreeModelDelete))
+
+        if item.type not in ("group","sys"):
+            m.addSeparator()
+            if item.type in ("tag","deck"):
+                act = m.addAction("Pin item")
+                act.triggered.connect(lambda:
+                    self._onTreeItemAction(item,"Pinned",self._onTreePin))
+            pre="Un" if self.marked[item.type].get(item.fullname) else ""
+            act = m.addAction(pre+"Mark item (tmp)")
+            act.triggered.connect(lambda:
+                self._onTreeItemAction(item,"Marked",self._onTreeMark))
 
         runHook("Blitzkrieg.treeMenu", self, item, m)
         m.popup(QCursor.pos())
@@ -544,3 +556,12 @@ class SidebarTreeWidget(QTreeWidget):
         mw.col.setMod()
         self.browser.onReset()
         self.browser.buildTree()
+
+    def _onTreeMark(self, item):
+        tf=not self.marked[item.type].get(item.fullname, False)
+        self.marked[item.type][item.fullname]=tf
+
+    def _onTreePin(self, item):
+        name = "Pinned::"+item.fullname.split("::")[-1]
+        search = '"%s:%s"'%(item.type,item.fullname)
+        mw.col.conf['savedFilters'][name] = search
