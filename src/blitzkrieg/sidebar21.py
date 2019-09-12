@@ -59,11 +59,10 @@ class SidebarTreeWidget(QTreeWidget):
         if getattr(item, 'oncollapse', None):
             item.oncollapse() #decks only
             return
-        try:
-            exp = item.isExpanded()
-            self.node_state[item.type][item.fullname] = exp
-        except: pass #item type is a deck, which is handled elsewhere
-
+        if not isinstance(item.type, str):
+            return
+        exp = item.isExpanded()
+        self.node_state[item.type][item.fullname] = exp
         if item.type == 'tag' and '::' not in item.fullname:
             if exp:
                 item.setBackground(0, QBrush(QColor(0,0,10,10)))
@@ -197,7 +196,7 @@ class SidebarTreeWidget(QTreeWidget):
 
     def onTreeMenu(self, pos):
         item=self.currentItem()
-        if not item:
+        if not item or not isinstance(item.type, str):
             return
 
         m = QMenu(self)
