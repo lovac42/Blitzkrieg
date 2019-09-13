@@ -271,7 +271,7 @@ class SidebarTreeWidget(QTreeWidget):
         # rename children
         for tag in mw.col.tags.all():
             if tag.startswith(dragName + "::"):
-                ids = f.findNotes("tag:"+tag)
+                ids = f.findNotes('"tag:%s"'%tag)
                 if rename:
                     nn = tag.replace(dragName+"::", newName+"::", 1)
                     mw.col.tags.bulkAdd(ids,nn)
@@ -279,7 +279,7 @@ class SidebarTreeWidget(QTreeWidget):
                 mw.col.tags.bulkRem(ids,tag)
                 self.mw.progress.update(label=tag)
         # rename parent
-        ids = f.findNotes("tag:"+dragName)
+        ids = f.findNotes('"tag:%s"'%dragName)
         if rename:
             mw.col.tags.bulkAdd(ids,newName)
             self.node_state['tag'][newName]=True
@@ -441,6 +441,7 @@ class SidebarTreeWidget(QTreeWidget):
             return
 
         f = anki.find.Finder(mw.col)
+        self.browser._lastSearchTxt=""
         parentDid = mw.col.decks.byName(item.fullname)["id"]
         actv = mw.col.decks.children(parentDid)
         actv = sorted(actv, key=lambda t: t[0])
@@ -475,13 +476,13 @@ class SidebarTreeWidget(QTreeWidget):
     def _onTreeTag2Deck(self, item):
         def tag2Deck(tag):
             did = mw.col.decks.id(tag)
-            cids = f.findCards("tag:"+tag)
+            cids = f.findCards('"tag:%s"'%tag)
             mw.col.sched.remFromDyn(cids)
             mw.col.db.execute(
                 "update cards set usn=?, mod=?, did=? where id in %s"%ids2str(cids),
                 mw.col.usn(), intTime(), did
             )
-            nids = f.findNotes("tag:"+tag)
+            nids = f.findNotes('"tag:%s"'%tag)
             mw.col.tags.bulkRem(nids,tag)
             self.mw.progress.update(label=tag)
 
@@ -490,7 +491,7 @@ class SidebarTreeWidget(QTreeWidget):
             return
 
         f = anki.find.Finder(mw.col)
-        self.browser.editor.saveNow(self.hideEditor)
+        self.browser._lastSearchTxt=""
         parent = item.fullname
         tag2Deck(parent)
         for tag in mw.col.tags.all():
