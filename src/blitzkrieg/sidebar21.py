@@ -42,6 +42,65 @@ class SidebarTreeWidget(QTreeWidget):
 
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.onTreeMenu)
+        self.setupContextMenuItems()
+
+
+    def setupContextMenuItems(self):
+              # Type, Item Title, Action Name, Callback
+              # type -1: separator
+              # type 0: normal
+              # type 1: non-folder path, actual item
+        self.MENU_ITEMS = {
+            "tag":(
+                (0,"Rename Leaf","Rename",self._onTreeTagRenameLeaf),
+                (0,"Rename Branch","Rename",self._onTreeTagRenameBranch),
+                (0,"Delete","Delete",self._onTreeTagDelete),
+                (-1,),
+                (0,"Pin item","Pinned",self._onTreePin),
+                (0,"Mark item (tmp)","Marked",self._onTreeMark),
+                (0,"Convert to decks","Convert",self._onTreeTag2Deck),
+            ),
+            "deck":(
+                (0,"Rename","Rename",self._onTreeDeckRename),
+                (0,"Add Subdeck","Add",self._onTreeDeckAdd),
+                (0,"Options","Options",self._onTreeDeckOptions),
+                (0,"Export","Export",self._onTreeDeckExport),
+                (0,"Delete","Delete",self._onTreeDeckDelete),
+                (-1,),
+                (0,"Pin item","Pinned",self._onTreePin),
+                (0,"Mark item (tmp)","Marked",self._onTreeMark),
+                (0,"Convert to tags","Convert",self._onTreeDeck2Tag),
+            ),
+            "dyn":(
+                (0,"Rename","Rename",self._onTreeDeckRename),
+                (0,"Empty","Empty",self._onTreeDeckEmpty),
+                (0,"Rebuild","Rebuild",self._onTreeDeckRebuild),
+                (0,"Options","Options",self._onTreeDeckOptions),
+                (0,"Export","Export",self._onTreeDeckExport),
+                (0,"Delete","Delete",self._onTreeDeckDelete),
+                (-1,),
+                (0,"Pin item","Pinned",self._onTreePin),
+                (0,"Mark item (tmp)","Marked",self._onTreeMark),
+            ),
+            "fav":(
+                (0,"Rename","Rename",self._onTreeFavRename),
+                (0,"Modify","Modify",self._onTreeFavModify),
+                (0,"Delete","Delete",self._onTreeFavDelete),
+                (-1,),
+                (0,"Mark item (tmp)","Marked",self._onTreeMark),
+            ),
+            "model":(
+                (0,"Rename Leaf","Rename",self._onTreeModelRenameLeaf),
+                (0,"Rename Branch","Rename",self._onTreeModelRenameBranch),
+                (0,"Add Model","Add",self._onTreeModelAdd),
+                (1,"Edit Fields","Edit",self.onTreeModelFields),
+                (1,"LaTeX Options","Edit",self.onTreeModelOptions),
+                (1,"Delete","Delete",self._onTreeModelDelete),
+                (-1,),
+                (0,"Mark item (tmp)","Marked",self._onTreeMark),
+            ),
+        }
+
 
     def keyPressEvent(self, evt):
         if evt.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -80,6 +139,8 @@ class SidebarTreeWidget(QTreeWidget):
 
     def dropEvent(self, event):
         dragItem = event.source().currentItem()
+        if not isinstance(dragItem.type, str):
+            return
         if dragItem.type not in self.node_state:
             event.setDropAction(Qt.IgnoreAction)
             event.accept()
@@ -196,109 +257,30 @@ class SidebarTreeWidget(QTreeWidget):
 
     def onTreeMenu(self, pos):
         item=self.currentItem()
-        if not item or not isinstance(item.type, str):
+        if not item:
             return
 
         m = QMenu(self)
-        if item.type == "sys":
-            pass #skip
+        if not isinstance(item.type, str) or item.type == "sys":
+            # 2.1 does not patch _systemTagTree.
+            # So I am using this to readjust item.type
+            item.type = "sys"
 
         elif item.type == "group":
             if item.fullname == "model":
                 act = m.addAction("Manage Model")
                 act.triggered.connect(self.onManageModel)
 
-        elif item.type in ("deck", "dyn"):
-            act = m.addAction("Rename")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Rename",self._onTreeDeckRename))
-
-            if item.type=='dyn':
-                act = m.addAction("Empty")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Empty",self._onTreeDeckEmpty))
-                act = m.addAction("Rebuild")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Rebuild",self._onTreeDeckRebuild))
-            else:
-                act = m.addAction("Add Subdeck")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Add",self._onTreeDeckAdd))
-
-            act = m.addAction("Options")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Options",self._onTreeDeckOptions))
-            act = m.addAction("Export")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Export",self._onTreeDeckExport))
-            act = m.addAction("Delete")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Delete",self._onTreeDeckDelete))
-            m.addSeparator()
-            act = m.addAction("Convert to tags")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Convert",self._onTreeDeck2Tag))
-
-        elif item.type == "tag":
-            act = m.addAction("Rename Leaf")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Rename",self._onTreeTagRenameLeaf))
-            act = m.addAction("Rename Branch")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Rename",self._onTreeTagRenameBranch))
-            act = m.addAction("Delete")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Delete",self._onTreeTagDelete))
-            m.addSeparator()
-            act = m.addAction("Convert to decks")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Convert",self._onTreeTag2Deck))
-
-        elif item.type == "fav":
-            sel = mw.col.conf['savedFilters'].get(item.fullname)
-            if sel:
-                act = m.addAction("Rename")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Rename",self._onTreeFavRename))
-                act = m.addAction("Modify")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Rename",self._onTreeFavModify))
-                act = m.addAction("Delete")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Delete",self._onTreeFavDelete))
-
-        elif item.type == "model":
-            act = m.addAction("Add Model")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Add",self._onTreeModelAdd))
-            act = m.addAction("Rename Leaf")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Rename",self._onTreeModelRenameLeaf))
-            act = m.addAction("Rename Branch")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Rename",self._onTreeModelRenameBranch))
-            if mw.col.models.byName(item.fullname):
-                #Not just a pathname
-                act = m.addAction("Edit Fields")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Edit",self.onTreeModelFields))
-                act = m.addAction("LaTeX Options")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Edit",self.onTreeModelOptions))
-                act = m.addAction("Delete")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Delete",self._onTreeModelDelete))
-
-        if item.type not in ("group","sys"):
-            m.addSeparator()
-            if item.type in ("tag","deck","dyn"):
-                act = m.addAction("Pin item")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Pinned",self._onTreePin))
-            pre="Un" if self.marked[item.type].get(item.fullname) else ""
-            act = m.addAction(pre+"Mark item (tmp)")
-            act.triggered.connect(lambda:
-                self._onTreeItemAction(item,"Marked",self._onTreeMark))
+        else:
+            for itm in self.MENU_ITEMS[item.type]:
+                if itm[0] < 0:
+                    m.addSeparator()
+                elif not itm[0] or self.hasValue(item):
+                    act = m.addAction(itm[1])
+                    act.triggered.connect(
+                        lambda b, item=item, itm=itm:
+                            self._onTreeItemAction(item,itm[2],itm[3])
+                    )
 
         runHook("Blitzkrieg.treeMenu", self, item, m)
         m.popup(QCursor.pos())
@@ -574,3 +556,10 @@ class SidebarTreeWidget(QTreeWidget):
         name = "Pinned::"+item.fullname.split("::")[-1]
         search = '"%s:%s"'%(item.type,item.fullname)
         mw.col.conf['savedFilters'][name] = search
+
+    def hasValue(self, item):
+        if item.type == "fav":
+            return self.col.conf['savedFilters'].get(item.fullname)
+        if item.type == "model":
+            return self.col.models.byName(item.fullname)
+        return False
