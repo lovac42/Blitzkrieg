@@ -20,14 +20,15 @@ from anki.hooks import runHook
 class SidebarTreeWidget(QTreeWidget):
     node_state = { # True for open, False for closed
         #Decks are handled per deck settings
-        'group': {}, 'tag': {}, 'fav': {},
-        'model': {}, 'dyn': {}, 'deck': None,
+        'group': {}, 'tag': {}, 'fav': {}, 'pinDeck': {}, 'pinDyn': {},
+        'model': {}, 'dyn': {}, 'deck': None, 'pinTag': {},
     }
 
     marked = {
-        'group': {}, 'tag': {}, 'fav': {},
-        'model': {}, 'dyn': {}, 'deck': {},
+        'group': {}, 'tag': {}, 'fav': {}, 'pinDeck': {}, 'pinDyn': {},
+        'model': {}, 'dyn': {}, 'deck': {}, 'pinTag': {},
     }
+
 
     def __init__(self):
         QTreeWidget.__init__(self)
@@ -52,6 +53,36 @@ class SidebarTreeWidget(QTreeWidget):
               # type 0: normal
               # type 1: non-folder path, actual item
         self.MENU_ITEMS = {
+            "pinDyn":(
+                (1,"Empty","Empty",self._onTreeDeckEmpty),
+                (1,"Rebuild","Rebuild",self._onTreeDeckRebuild),
+                (1,"Options","Options",self._onTreeDeckOptions),
+                (1,"Export","Export",self._onTreeDeckExport),
+                (-1,),
+                (1,"Rename","Rename",self._onTreeFavRename),
+                (1,"Unpin","Unpin",self._onTreeFavDelete),
+                (-1,),
+                (0,"Mark item (tmp)",None,self._onTreeMarkPinned),
+            ),
+            "pinDeck":(
+                (1,"Add Notes",None,self._onTreeDeckAddCard),
+                (1,"Options","Options",self._onTreeDeckOptions),
+                (1,"Export","Export",self._onTreeDeckExport),
+                (-1,),
+                (1,"Rename","Rename",self._onTreeFavRename),
+                (1,"Unpin","Unpin",self._onTreeFavDelete),
+                (-1,),
+                (0,"Mark item (tmp)",None,self._onTreeMarkPinned),
+            ),
+            "pinTag":(
+                (1,"Select All",None,self._onTreeTagSelectAll),
+                (1,"Add Notes",None,self._onTreeTagAddCard),
+                (-1,),
+                (1,"Rename","Rename",self._onTreeFavRename),
+                (1,"Unpin","Unpin",self._onTreeFavDelete),
+                (-1,),
+                (0,"Mark item (tmp)",None,self._onTreeMarkPinned),
+            ),
             "tag":(
                 (0,"Select All",None,self._onTreeTagSelectAll),
                 (0,"Add Notes",None,self._onTreeTagAddCard),
@@ -87,9 +118,9 @@ class SidebarTreeWidget(QTreeWidget):
                 (0,"Mark item (tmp)",None,self._onTreeMark),
             ),
             "fav":(
-                (0,"Rename","Rename",self._onTreeFavRename),
-                (0,"Modify","Modify",self._onTreeFavModify),
-                (0,"Delete","Delete",self._onTreeFavDelete),
+                (1,"Rename","Rename",self._onTreeFavRename),
+                (1,"Modify","Modify",self._onTreeFavModify),
+                (1,"Delete","Delete",self._onTreeFavDelete),
                 (-1,),
                 (0,"Mark item (tmp)",None,self._onTreeMark),
             ),
@@ -474,18 +505,24 @@ class SidebarTreeWidget(QTreeWidget):
 
 
     def _onTreeFavDelete(self, item):
-        act=mw.col.conf['savedFilters'].get(item.fullname)
+        act=mw.col.conf['savedFilters'].get(item.favname)
         if not act: return
-        if askUser(_("Remove %s from your saved searches?") % item.fullname):
-            del mw.col.conf['savedFilters'][item.fullname]
+        if askUser(_("Remove %s from your saved searches?") % item.favname):
+            del mw.col.conf['savedFilters'][item.favname]
 
     def _onTreeFavRename(self, item):
-        act=mw.col.conf['savedFilters'].get(item.fullname)
+        act=mw.col.conf['savedFilters'].get(item.favname)
         if not act: return
-        newName = getOnlyText(_("New search name:"),default=item.fullname)
+        s=item.favname
+        p=False
+        if item.type.startswith("pin"):
+            s=re.sub(r"^Pinned::","",s)
+            p=True
+        newName = getOnlyText(_("New search name:"),default=s)
         if newName:
-            mw.col.conf['savedFilters'][newName]=act
-            del(mw.col.conf['savedFilters'][item.fullname])
+            if p: newName="Pinned::"+newName
+            self.col.conf['savedFilters'][newName] = act
+            del(self.col.conf['savedFilters'][item.favname])
 
     def _onTreeFavModify(self, item):
         act=mw.col.conf['savedFilters'].get(item.fullname)
@@ -590,9 +627,13 @@ class SidebarTreeWidget(QTreeWidget):
         tf=not self.marked[item.type].get(item.fullname, False)
         self.marked[item.type][item.fullname]=tf
 
+    def _onTreeMarkPinned(self, item):
+        tf=not self.marked[item.type].get(item.favname, False)
+        self.marked[item.type][item.favname]=tf
+
     def _onTreePin(self, item):
-        name = "Pinned::%ss::%s"%(
-            item.type,item.fullname.split("::")[-1])
+        name = "Pinned::%s"%(
+            item.fullname.split("::")[-1])
         search = '"%s:%s"'%(item.type,item.fullname)
         mw.col.conf['savedFilters'][name] = search
 
@@ -607,8 +648,10 @@ class SidebarTreeWidget(QTreeWidget):
                 mw.col.sched.rebuildDyn(d['id'])
 
     def hasValue(self, item):
-        if item.type == "fav":
-            return mw.col.conf['savedFilters'].get(item.fullname)
         if item.type == "model":
             return mw.col.models.byName(item.fullname)
+        if item.type == "fav":
+            return mw.col.conf['savedFilters'].get(item.fullname)
+        if item.type in ("pinTag","pinDeck","pinDyn"):
+            return mw.col.conf['savedFilters'].get(item.favname)
         return False

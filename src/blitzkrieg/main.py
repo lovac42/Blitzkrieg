@@ -37,7 +37,7 @@ Browser.buildTree = replace_buildTree
 
 
 def onRevertedState(stateName):
-    if re.search(r"([Dd]eck|dyn|tag|fav|model)$",stateName):
+    if re.search(r"([Dd]eck|dyn|tag|fav|model|pin(Deck|Dyn|Tag))$",stateName):
         browserInstance.buildTree()
 addHook("revertedState", onRevertedState)
 
