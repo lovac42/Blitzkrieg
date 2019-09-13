@@ -6,4 +6,3 @@
 # Support: https://github.com/lovac42/Blitzkrieg
 
 
-from .main import *
