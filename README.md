@@ -11,4 +11,5 @@ NM uses a unique method of patching into Anki that causes problem for ALL addons
 
 
 ## Credits:
-loosely based on Hierarchical Tags, by Patrice Neff: https://ankiweb.net/shared/download/1089921461  
+Loosely based on Hierarchical Tags, by Patrice Neff:  
+https://ankiweb.net/shared/download/1089921461  
