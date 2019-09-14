@@ -24,20 +24,22 @@ def favTree(browser, root):
         type = "fav"
         fname = None
         for idx, name in enumerate(node):
-            if node[0]=='Pinned' and idx!=0:
-                if filt.startswith('"dyn:'):
-                    type = "pinDyn"
-                    ico = "deck.svg"
-                    fname = filt[5:-1]
-                    filt='"deck'+filt[4:]
-                elif filt.startswith('"deck:'):
-                    type = "pinDeck"
-                    ico = "deck.svg"
-                    fname = filt[6:-1]
+            if node[0]=='Pinned':
+                if idx==0:
+                    type = "pin"
                 elif filt.startswith('"tag:'):
                     type = "pinTag"
                     ico = "tag.svg"
                     fname = filt[5:-1]
+                elif filt.startswith('"deck:'):
+                    type = "pinDeck"
+                    ico = "deck.svg"
+                    fname = filt[6:-1]
+                elif filt.startswith('"dyn:'):
+                    type = "pinDyn"
+                    ico = "deck.svg"
+                    fname = filt[5:-1]
+                    filt='"deck'+filt[4:]
 
             leaf_tag = '::'.join(node[0:idx + 1])
             if not favs_tree.get(leaf_tag):
@@ -45,7 +47,7 @@ def favTree(browser, root):
                 item = browser.CallbackItem(
                     parent, name,
                     lambda s=filt: browser.setFilter(s),
-                    expanded=browser.sidebarTree.node_state.get('fav').get(leaf_tag,True)
+                    expanded=browser.sidebarTree.node_state.get(type).get(leaf_tag,True)
                 )
                 item.type = type
                 item.fullname = fname or leaf_tag

@@ -21,12 +21,12 @@ class SidebarTreeWidget(QTreeWidget):
     node_state = { # True for open, False for closed
         #Decks are handled per deck settings
         'group': {}, 'tag': {}, 'fav': {}, 'pinDeck': {}, 'pinDyn': {},
-        'model': {}, 'dyn': {}, 'deck': None, 'pinTag': {},
+        'model': {}, 'dyn': {}, 'deck': None, 'pinTag': {}, 'pin': {},
     }
 
     marked = {
         'group': {}, 'tag': {}, 'fav': {}, 'pinDeck': {}, 'pinDyn': {},
-        'model': {}, 'dyn': {}, 'deck': {}, 'pinTag': {},
+        'model': {}, 'dyn': {}, 'deck': {}, 'pinTag': {}, 'pin': {},
     }
 
 
@@ -53,6 +53,7 @@ class SidebarTreeWidget(QTreeWidget):
               # type 0: normal
               # type 1: non-folder path, actual item
         self.MENU_ITEMS = {
+            "pin":((-1,),),
             "pinDyn":(
                 (1,"Empty","Empty",self._onTreeDeckEmpty),
                 (1,"Rebuild","Rebuild",self._onTreeDeckRebuild),
@@ -60,7 +61,7 @@ class SidebarTreeWidget(QTreeWidget):
                 (1,"Export","Export",self._onTreeDeckExport),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
-                (1,"Unpin","Unpin",self._onTreeFavDelete),
+                (1,"Unpin",None,self._onTreePinDelete),
                 (-1,),
                 (0,"Mark item (tmp)",None,self._onTreeMarkPinned),
             ),
@@ -70,21 +71,21 @@ class SidebarTreeWidget(QTreeWidget):
                 (1,"Export","Export",self._onTreeDeckExport),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
-                (1,"Unpin","Unpin",self._onTreeFavDelete),
+                (1,"Unpin",None,self._onTreePinDelete),
                 (-1,),
                 (0,"Mark item (tmp)",None,self._onTreeMarkPinned),
             ),
             "pinTag":(
-                (1,"Select All",None,self._onTreeTagSelectAll),
+                (1,"Show All",None,self._onTreeTagSelectAll),
                 (1,"Add Notes",None,self._onTreeTagAddCard),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
-                (1,"Unpin","Unpin",self._onTreeFavDelete),
+                (1,"Unpin",None,self._onTreePinDelete),
                 (-1,),
                 (0,"Mark item (tmp)",None,self._onTreeMarkPinned),
             ),
             "tag":(
-                (0,"Select All",None,self._onTreeTagSelectAll),
+                (0,"Show All",None,self._onTreeTagSelectAll),
                 (0,"Add Notes",None,self._onTreeTagAddCard),
                 (0,"Rename Leaf","Rename",self._onTreeTagRenameLeaf),
                 (0,"Rename Branch","Rename",self._onTreeTagRenameBranch),
@@ -180,30 +181,30 @@ class SidebarTreeWidget(QTreeWidget):
         dragItem = event.source().currentItem()
         if not isinstance(dragItem.type, str):
             return
-        if dragItem.type not in self.node_state:
+        dgType = dragItem.type
+        if dgType not in self.node_state:
             event.setDropAction(Qt.IgnoreAction)
             event.accept()
             return
         QAbstractItemView.dropEvent(self, event)
-        if not self.dropItem or self.dropItem.type == dragItem.type:
-            dragName = dragItem.fullname
-            try:
-                dropName = self.dropItem.fullname
-            except AttributeError:
-                dropName = None #no parent
-            self.mw.checkpoint("Dragged "+dragItem.type)
-            parse=mw.col.decks #used for parsing '::' separators
-            if dragItem.type in ("deck", "dyn"):
+        if not self.dropItem or \
+        self.dropItem.type == dgType or \
+        self.dropItem.type == dgType[:3]: #pin
+            self.mw.checkpoint("Dragged "+dgType)
+            dragName,dropName = self._getItemNames(dragItem)
+            parse = mw.col.decks #used for parsing '::' separators
+            cb = None
+            if dgType in ("deck", "dyn"):
                 self._deckDropEvent(dragName,dropName)
-            elif dragItem.type == "tag":
-                self._strDropEvent(dragName,dropName,self.moveTag)
-                self.node_state['tag'][dropName] = True
-            elif dragItem.type == "model":
-                self._strDropEvent(dragName,dropName,self.moveModel)
-                self.node_state['model'][dropName] = True
-            elif dragItem.type == "fav":
-                self._strDropEvent(dragName,dropName,self.moveFav)
-                self.node_state['fav'][dropName] = True
+            elif dgType == "tag":
+                cb = self.moveTag
+            elif dgType == "model":
+                cb = self.moveModel
+            elif dgType[:3] in ("fav","pin"):
+                cb = self.moveFav
+            if cb:
+                self._strDropEvent(dragName,dropName,cb)
+                self.node_state[dgType][dropName] = True
         mw.col.setMod()
         self.browser.buildTree()
 
@@ -217,20 +218,21 @@ class SidebarTreeWidget(QTreeWidget):
             assert dropName.strip()
             callback(dragName, dropName + "::" + parse._basename(dragName))
 
-
     def _deckDropEvent(self, dragName, dropName):
         parse=mw.col.decks #used for parsing '::' separators
         dragDid = parse.byName(dragName)["id"]
         dropDid = parse.byName(dropName)["id"] if dropName else None
         try:
-            parse=mw.col.decks #used for parsing '::' separators
             parse.renameForDragAndDrop(dragDid,dropDid)
         except DeckRenameError as e:
             showWarning(e.description)
         mw.col.decks.get(dropDid)['browserCollapsed'] = False
 
-
     def moveFav(self, dragName, newName=""):
+        try:
+            type = self.dropItem.type
+        except AttributeError:
+            type = "fav"
         saved = mw.col.conf['savedFilters']
         for fav in list(saved):
             act = mw.col.conf['savedFilters'].get(fav)
@@ -238,11 +240,11 @@ class SidebarTreeWidget(QTreeWidget):
                 nn = fav.replace(dragName+"::", newName+"::", 1)
                 mw.col.conf['savedFilters'][nn] = act
                 del(mw.col.conf['savedFilters'][fav])
-                self.node_state['fav'][nn] = True
+                self.node_state[type][nn] = True
             elif fav == dragName:
                 mw.col.conf['savedFilters'][newName] = act
                 del(mw.col.conf['savedFilters'][dragName])
-                self.node_state['fav'][newName] = True
+                self.node_state[type][newName] = True
 
 
     def moveModel(self, dragName, newName=""):
@@ -505,6 +507,11 @@ class SidebarTreeWidget(QTreeWidget):
         self.mw.requireReset()
 
 
+    def _onTreePinDelete(self, item):
+        act=mw.col.conf['savedFilters'].get(item.favname)
+        if not act: return
+        del mw.col.conf['savedFilters'][item.favname]
+
     def _onTreeFavDelete(self, item):
         act=mw.col.conf['savedFilters'].get(item.favname)
         if not act: return
@@ -520,10 +527,11 @@ class SidebarTreeWidget(QTreeWidget):
             s=re.sub(r"^Pinned::","",s)
             p=True
         newName = getOnlyText(_("New search name:"),default=s)
+        newName = re.sub(r"^Pinned::","",newName)
         if newName:
             if p: newName="Pinned::"+newName
-            self.col.conf['savedFilters'][newName] = act
-            del(self.col.conf['savedFilters'][item.favname])
+            del(mw.col.conf['savedFilters'][item.favname])
+            mw.col.conf['savedFilters'][newName] = act
 
     def _onTreeFavModify(self, item):
         act=mw.col.conf['savedFilters'].get(item.fullname)
@@ -636,6 +644,8 @@ class SidebarTreeWidget(QTreeWidget):
         name = "Pinned::%s"%(
             item.fullname.split("::")[-1])
         search = '"%s:%s"'%(item.type,item.fullname)
+        if "savedFilters" not in mw.col.conf:
+            mw.col.conf['savedFilters'] = {}
         mw.col.conf['savedFilters'][name] = search
 
     def onEmptyAll(self, item):
@@ -656,3 +666,20 @@ class SidebarTreeWidget(QTreeWidget):
         if item.type in ("pinTag","pinDeck","pinDyn"):
             return mw.col.conf['savedFilters'].get(item.favname)
         return False
+
+    def _getItemNames(self, dragItem):
+        try: #type fav or pin
+            dragName = dragItem.favname
+            try:
+                dropName = self.dropItem.favname
+            except AttributeError:
+                dropName = None #no parent
+        except AttributeError:
+            dragName = dragItem.fullname
+            try:
+                dropName = self.dropItem.fullname
+            except AttributeError:
+                dropName = None #no parent
+        if not dropName and dragItem.type[:3] == "pin":
+            dropName="Pinned"
+        return dragName,dropName
