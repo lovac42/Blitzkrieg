@@ -304,6 +304,8 @@ class SidebarTreeWidget(QTreeWidget):
         elif self.mw.app.keyboardModifiers()==Qt.ShiftModifier:
             act = m.addAction("Mark/Unmark item (tmp)")
             act.triggered.connect(lambda:self._onTreeMark(item))
+            act = m.addAction("Refresh")
+            act.triggered.connect(mw.col.tags.registerNotes)
             if item.childCount():
                 m.addSeparator()
                 act = m.addAction("Collapse All")
@@ -334,6 +336,8 @@ class SidebarTreeWidget(QTreeWidget):
                 act.triggered.connect(self.onManageModel)
 
             m.addSeparator()
+            act = m.addAction("Find...")
+            act.triggered.connect(lambda:self.findRecursive(item))
             act = m.addAction("Collapse All")
             act.triggered.connect(lambda:self._expandAllChildren(item))
             act = m.addAction("Expand All")
@@ -723,3 +727,17 @@ class SidebarTreeWidget(QTreeWidget):
             if itm.childCount():
                 self._expandAllChildren(itm, expanded)
         item.setExpanded(expanded)
+
+    def findRecursive(self, item):
+        TAG_TYPE=item.fullname
+        self._expandAllChildren(item,True)
+        self.browser.buildTree()
+        #TODO: Write dialog for complex searching options
+        s = getOnlyText(_("Search for:"))
+        if s:
+            itms=self.findItems(s,
+                Qt.MatchRecursive|Qt.MatchContains
+            )
+            for itm in itms:
+                if itm.type==TAG_TYPE:
+                    itm.setBackground(0, QBrush(Qt.cyan))
