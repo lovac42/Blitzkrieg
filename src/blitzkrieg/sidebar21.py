@@ -283,7 +283,7 @@ class SidebarTreeWidget(QTreeWidget):
                     mw.col.tags.bulkAdd(ids,nn)
                     self.node_state['tag'][nn]=True
                 mw.col.tags.bulkRem(ids,tag)
-                self.mw.progress.update(label=tag)
+                # self.mw.progress.update(label=tag) #never pops up
         # rename parent
         ids = f.findNotes('"tag:%s"'%dragName)
         if rename:
