@@ -166,12 +166,10 @@ class SidebarTreeWidget(QTreeWidget):
             return
         exp = item.isExpanded()
         self.node_state[item.type][item.fullname] = exp
-        if item.type == 'tag' and '::' not in item.fullname:
-            if exp:
-                item.setBackground(0, QBrush(QColor(0,0,10,10)))
-            else:
-                item.setBackground(0, QBrush(Qt.transparent))
-
+        if item.type == 'tag' and item.childCount() \
+        and '::' not in item.fullname:
+            color = QColor(0,0,10,10) if exp else Qt.transparent
+            item.setBackground(0, QBrush(color))
 
     def dropMimeData(self, parent, row, data, action):
         # Dealing with qt serialized data is a headache,
@@ -333,9 +331,14 @@ class SidebarTreeWidget(QTreeWidget):
                 act.setChecked(up)
                 act.triggered.connect(self._toggleMWUpdate)
 
-            if item.fullname == "model":
+            elif item.fullname == "model":
                 act = m.addAction("Manage Model")
                 act.triggered.connect(self.onManageModel)
+
+            act = m.addAction("Collapse All")
+            act.triggered.connect(lambda:self._expandAllChildren(item))
+            act = m.addAction("Expand All")
+            act.triggered.connect(lambda:self._expandAllChildren(item,True))
 
         else:
             for itm in self.MENU_ITEMS[item.type]:
@@ -711,3 +714,11 @@ class SidebarTreeWidget(QTreeWidget):
             d = mw.col.decks.byName(item.fullname)
             mw.col.decks.select(d["id"])
             self.mw.reset(True)
+
+    def _expandAllChildren(self, item, expanded=False):
+        for i in range(item.childCount()):
+            itm = item.child(i)
+            itm.setExpanded(expanded)
+            if itm.childCount():
+                self._expandAllChildren(itm, expanded)
+        item.setExpanded(expanded)
