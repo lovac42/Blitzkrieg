@@ -21,7 +21,8 @@ class SidebarTreeWidget(QTreeWidget):
     node_state = { # True for open, False for closed
         #Decks are handled per deck settings
         'group': {}, 'tag': {}, 'fav': {}, 'pinDeck': {}, 'pinDyn': {},
-        'model': {}, 'dyn': {}, 'deck': None, 'pinTag': {}, 'pin': {},
+        'model': {}, 'dyn': {}, 'pinTag': {}, 'pin': {},
+        'deck': None, 'Deck': None,
     }
 
     marked = {
@@ -315,16 +316,17 @@ class SidebarTreeWidget(QTreeWidget):
             item.type = "sys"
 
         elif item.type == "group":
-            if item.fullname == "deck":
+            if item.fullname == "tag":
+                act = m.addAction("Refresh")
+                act.triggered.connect(mw.col.tags.registerNotes)
+
+            elif item.fullname == "deck":
                 act = m.addAction("Add Deck")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Add",self._onTreeDeckAdd))
+                act.triggered.connect(self._onTreeDeckAdd)
                 act = m.addAction("Empty All Filters")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Empty",self.onEmptyAll))
+                act.triggered.connect(self.onEmptyAll)
                 act = m.addAction("Rebuild All Filters")
-                act.triggered.connect(lambda:
-                    self._onTreeItemAction(item,"Rebuild",self.onRebuildAll))
+                act.triggered.connect(self.onRebuildAll)
                 up = mw.col.conf.get('Blitzkrieg.updateMW', False)
                 act = m.addAction("Auto Update Overview")
                 act.setCheckable(True)
@@ -660,15 +662,17 @@ class SidebarTreeWidget(QTreeWidget):
             mw.col.conf['savedFilters'] = {}
         mw.col.conf['savedFilters'][name] = search
 
-    def onEmptyAll(self, item):
+    def onEmptyAll(self):
         for d in mw.col.decks.all():
             if d['dyn']:
                 mw.col.sched.emptyDyn(d['id'])
+        self.browser.onReset()
 
-    def onRebuildAll(self, item):
+    def onRebuildAll(self):
         for d in mw.col.decks.all():
             if d['dyn']:
                 mw.col.sched.rebuildDyn(d['id'])
+        self.browser.onReset()
 
     def hasValue(self, item):
         if item.type == "model":
@@ -702,7 +706,7 @@ class SidebarTreeWidget(QTreeWidget):
 
     def _changeDecks(self, item):
         up = mw.col.conf.get('Blitzkrieg.updateMW', False)
-        if up and item.type in ('deck','dyn','pinDeck') \
+        if up and item.type in ('deck','dyn','pinDeck','pinDyn') \
         and self.mw.state == 'overview':
             d = mw.col.decks.byName(item.fullname)
             mw.col.decks.select(d["id"])
