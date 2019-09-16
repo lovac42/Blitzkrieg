@@ -144,7 +144,7 @@ class SidebarTreeWidget(QTreeWidget):
     def onTreeClick(self, item, col):
         if getattr(item, 'onclick', None):
             item.onclick()
-            self.timer=self.mw.progress.timer(
+            self.timer=mw.progress.timer(
                 20, lambda:self._changeDecks(item), False)
 
     def onTreeCollapse(self, item):
@@ -156,6 +156,7 @@ class SidebarTreeWidget(QTreeWidget):
             return
         exp = item.isExpanded()
         self.node_state[item.type][item.fullname] = exp
+        #highlight parent decks
         if item.type == 'tag' and item.childCount() \
         and not self.marked['tag'].get(item.fullname) \
         and '::' not in item.fullname:
@@ -183,7 +184,7 @@ class SidebarTreeWidget(QTreeWidget):
         if not self.dropItem or \
         self.dropItem.type == dgType or \
         self.dropItem.type == dgType[:3]: #pin
-            self.mw.checkpoint("Dragged "+dgType)
+            mw.checkpoint("Dragged "+dgType)
             dragName,dropName = self._getItemNames(dragItem)
             parse = mw.col.decks #used for parsing '::' separators
             cb = None
@@ -272,7 +273,6 @@ class SidebarTreeWidget(QTreeWidget):
                     mw.col.tags.bulkAdd(ids,nn)
                     self.node_state['tag'][nn]=True
                 mw.col.tags.bulkRem(ids,tag)
-                # self.mw.progress.update(label=tag) #never pops up
         # rename parent
         ids = f.findNotes('"tag:%s"'%dragName)
         if rename:
@@ -304,7 +304,7 @@ class SidebarTreeWidget(QTreeWidget):
             # So I am using this to readjust item.type
             item.type = "sys"
 
-        elif self.mw.app.keyboardModifiers()==Qt.ShiftModifier:
+        elif mw.app.keyboardModifiers()==Qt.ShiftModifier:
             act = m.addAction("Mark/Unmark item (tmp)")
             act.triggered.connect(lambda:self._onTreeMark(item))
             act = m.addAction("Refresh")
@@ -366,11 +366,9 @@ class SidebarTreeWidget(QTreeWidget):
         if action:
             mw.checkpoint(action+" "+item.type)
         self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
-        self.mw.progress.start(label="Sidebar Action")
         try:
             callback(item)
         finally:
-            self.mw.progress.finish()
             mw.col.setMod()
             self.browser.setupHooks()
             self.browser.onReset()
@@ -381,12 +379,12 @@ class SidebarTreeWidget(QTreeWidget):
         self.browser._lastSearchTxt=""
         sel = mw.col.decks.byName(item.fullname)
         mw.col.sched.emptyDyn(sel['id'])
-        self.mw.reset()
+        mw.reset()
 
     def _onTreeDeckRebuild(self, item):
         sel = mw.col.decks.byName(item.fullname)
         mw.col.sched.rebuildDyn(sel['id'])
-        self.mw.reset()
+        mw.reset()
 
     def _onTreeDeckOptions(self, item):
         deck = mw.col.decks.byName(item.fullname)
@@ -398,8 +396,8 @@ class SidebarTreeWidget(QTreeWidget):
                 import aqt.deckconf
                 aqt.deckconf.DeckConf(self.mw, deck, self.browser)
         except TypeError:
-            self.mw.onDeckConf(deck)
-        self.mw.reset(True)
+            mw.onDeckConf(deck)
+        mw.reset(True)
 
     def _onTreeDeckExport(self, item):
         deck = mw.col.decks.byName(item.fullname)
@@ -407,8 +405,8 @@ class SidebarTreeWidget(QTreeWidget):
             import aqt.exporting
             aqt.exporting.ExportDialog(self.mw, deck['id'], self.browser)
         except TypeError:
-            self.mw.onExport(did=deck['id'])
-        self.mw.reset(True)
+            mw.onExport(did=deck['id'])
+        mw.reset(True)
 
     def _onTreeDeckAdd(self, item):
         default=item.fullname+"::" if item.type=='deck' else ''
@@ -417,7 +415,7 @@ class SidebarTreeWidget(QTreeWidget):
             mw.col.decks.id(deck)
             mw.col.decks.save()
             mw.col.decks.flush()
-            self.mw.reset(True)
+            mw.reset(True)
 
     def _onTreeDeckDelete(self, item):
         self.browser._lastSearchTxt=""
@@ -477,37 +475,41 @@ class SidebarTreeWidget(QTreeWidget):
         if not askUser(msg, parent=self, defaultno=True):
             return
 
-        f = anki.find.Finder(mw.col)
-        self.browser._lastSearchTxt=""
-        parentDid = mw.col.decks.byName(item.fullname)["id"]
-        actv = mw.col.decks.children(parentDid)
-        actv = sorted(actv, key=lambda t: t[0])
-        actv.insert(0,(item.fullname,parentDid))
+        mw.progress.start(
+            label=_("Converting decks to tags"))
+        try:
+            f = anki.find.Finder(mw.col)
+            self.browser._lastSearchTxt=""
+            parentDid = mw.col.decks.byName(item.fullname)["id"]
+            actv = mw.col.decks.children(parentDid)
+            actv = sorted(actv, key=lambda t: t[0])
+            actv.insert(0,(item.fullname,parentDid))
 
-        self.mw.checkpoint("Convert %s to tag"%item.type)
-        for name,did in actv:
-            #add subdeck tree structure as tags
-            nids = f.findNotes('''"deck:%s" -"deck:%s::*"'''%(name,name))
-            tagName = re.sub(r"\s*(::)?\s*","\g<1>",name)
-            mw.col.tags.bulkAdd(nids, tagName)
-            #skip parent or dyn decks
-            if did == parentDid or mw.col.decks.get(did)['dyn']:
-                continue
-            #collapse subdecks into one
-            mw.col.sched.emptyDyn(None, "odid=%d"%did)
-            mw.col.db.execute(
-                "update cards set usn=?, mod=?, did=? where did=?",
-                mw.col.usn(), intTime(), parentDid, did
-            )
-            mw.col.decks.rem(did,childrenToo=False)
-            self.mw.progress.update(label=name)
-
-        mw.col.decks.save()
-        mw.col.decks.flush()
-        mw.col.tags.save()
-        mw.col.tags.flush()
-        mw.col.tags.registerNotes()
-        self.mw.requireReset()
+            for name,did in actv:
+                mw.progress.update(label=name)
+                #add subdeck tree structure as tags
+                nids = f.findNotes('''"deck:%s" -"deck:%s::*"'''%(name,name))
+                tagName = re.sub(r"\s*(::)\s*","\g<1>",name)
+                tagName = re.sub(r"\s+","_",tagName)
+                mw.col.tags.bulkAdd(nids, tagName)
+                #skip parent or dyn decks
+                if did == parentDid or mw.col.decks.get(did)['dyn']:
+                    continue
+                #collapse subdecks into one
+                mw.col.sched.emptyDyn(None, "odid=%d"%did)
+                mw.col.db.execute(
+                    "update cards set usn=?, mod=?, did=? where did=?",
+                    mw.col.usn(), intTime(), parentDid, did
+                )
+                mw.col.decks.rem(did,childrenToo=False)
+        finally:
+            mw.progress.finish()
+            mw.col.decks.save()
+            mw.col.decks.flush()
+            mw.col.tags.save()
+            mw.col.tags.flush()
+            mw.col.tags.registerNotes()
+            mw.requireReset()
 
 
     def _onTreeTag2Deck(self, item):
@@ -521,25 +523,31 @@ class SidebarTreeWidget(QTreeWidget):
             )
             nids = f.findNotes('"tag:%s"'%tag)
             mw.col.tags.bulkRem(nids,tag)
-            self.mw.progress.update(label=tag)
 
         msg = _("Convert all tags to deck structure?")
         if not askUser(msg, parent=self, defaultno=True):
             return
 
-        f = anki.find.Finder(mw.col)
-        self.browser._lastSearchTxt=""
-        parent = item.fullname
-        tag2Deck(parent)
-        for tag in mw.col.tags.all():
-            if tag.startswith(parent + "::"):
-                tag2Deck(tag)
-        mw.col.decks.save()
-        mw.col.decks.flush()
-        mw.col.tags.save()
-        mw.col.tags.flush()
-        mw.col.tags.registerNotes()
-        self.mw.requireReset()
+        mw.progress.start(
+            label=_("Converting tags to decks"))
+
+        try:
+            f = anki.find.Finder(mw.col)
+            self.browser._lastSearchTxt=""
+            parent = item.fullname
+            tag2Deck(parent)
+            for tag in mw.col.tags.all():
+                mw.progress.update(label=tag)
+                if tag.startswith(parent + "::"):
+                    tag2Deck(tag)
+        finally:
+            mw.progress.finish()
+            mw.col.decks.save()
+            mw.col.decks.flush()
+            mw.col.tags.save()
+            mw.col.tags.flush()
+            mw.col.tags.registerNotes()
+            mw.requireReset()
 
 
     def _onTreePinDelete(self, item):
@@ -660,7 +668,7 @@ class SidebarTreeWidget(QTreeWidget):
 
     def onManageModel(self):
         self.browser.editor.saveNow(self.hideEditor)
-        self.mw.checkpoint("Manage model")
+        mw.checkpoint("Manage model")
         import aqt.models
         aqt.models.Models(self.mw, self.browser)
         mw.col.setMod()
@@ -731,10 +739,10 @@ class SidebarTreeWidget(QTreeWidget):
     def _changeDecks(self, item):
         up = mw.col.conf.get('Blitzkrieg.updateOV', False)
         if up and item.type in ('deck','dyn','pinDeck','pinDyn') \
-        and self.mw.state == 'overview':
+        and mw.state == 'overview':
             d = mw.col.decks.byName(item.fullname)
             mw.col.decks.select(d["id"])
-            self.mw.reset(True)
+            mw.reset(True)
 
     def _expandAllChildren(self, item, expanded=False):
         for i in range(item.childCount()):
@@ -804,4 +812,9 @@ class SidebarTreeWidget(QTreeWidget):
     def refresh(self):
         self.found = {}
         mw.col.tags.registerNotes()
+        #Clear to create a smooth UX
+        self.marked['group'] = {}
+        self.marked['pinDeck'] = {}
+        self.marked['pinDyn'] = {}
+        self.marked['pinTag'] = {}
 
