@@ -65,7 +65,10 @@ def userTagTree(browser, root):
     root.setExpanded(browser.sidebarTree.node_state.get("group").get('tag',True))
     root.setIcon(0, QIcon(":/icons/tag.svg"))
     tags_tree = {}
-    for t in sorted(browser.col.tags.all(), key=lambda t: t.lower()):
+    SORT = browser.col.conf.get('Blitzkrieg.sort_tag',False)
+    TAGS = sorted(browser.col.tags.all(),
+            key=lambda t: t.lower() if SORT else t)
+    for t in TAGS:
         if t.lower() == "marked" or t.lower() == "leech":
             continue
         node = t.split('::')
@@ -97,7 +100,9 @@ def decksTree(browser, root):
     root.fullname = "deck"
     root.setExpanded(browser.sidebarTree.node_state.get("group").get('deck',True))
     root.setIcon(0, QIcon(":/icons/deck.svg"))
-    grps = browser.col.sched.deckDueTree()
+    SORT = browser.col.conf.get('Blitzkrieg.sort_deck',False)
+    grps = sorted(browser.col.sched.deckDueTree(),
+            key=lambda g: g[0].lower() if SORT else g[0])
     def fillGroups(root, grps, head=""):
         for g in grps:
             item = browser.CallbackItem(
@@ -130,7 +135,10 @@ def modelTree(browser, root):
     root.setExpanded(browser.sidebarTree.node_state.get("group").get('model',False))
     root.setIcon(0, QIcon(":/icons/notetype.svg"))
     models_tree = {}
-    for m in sorted(browser.col.models.all(), key=itemgetter("name")):
+    SORT = browser.col.conf.get('Blitzkrieg.sort_model',False)
+    MODELS = sorted(browser.col.models.all(),
+            key=lambda m: m["name"].lower() if SORT else m["name"])
+    for m in MODELS:
         node = m['name'].split('::')
         for idx, name in enumerate(node):
             leaf_model = '::'.join(node[0:idx + 1])

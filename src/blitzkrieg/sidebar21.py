@@ -305,10 +305,25 @@ class SidebarTreeWidget(QTreeWidget):
             item.type = "sys"
 
         elif mw.app.keyboardModifiers()==Qt.ShiftModifier:
-            act = m.addAction("Mark/Unmark item (tmp)")
-            act.triggered.connect(lambda:self._onTreeMark(item))
+            if item.type != "group":
+                act = m.addAction("Mark/Unmark item (tmp)")
+                act.triggered.connect(lambda:self._onTreeMark(item))
             act = m.addAction("Refresh")
             act.triggered.connect(self.refresh)
+            if item.type == "group":
+                if item.fullname in ("tag","deck","model"):
+                    sort = mw.col.conf.get('Blitzkrieg.sort_'+item.fullname, False)
+                    act = m.addAction("Sort by A-a-B-b")
+                    act.setCheckable(True)
+                    act.setChecked(sort)
+                    act.triggered.connect(lambda:self._toggleSortOption(item))
+                if item.fullname == "deck":
+                    up = mw.col.conf.get('Blitzkrieg.updateOV', False)
+                    act = m.addAction("Auto Update Overview")
+                    act.setCheckable(True)
+                    act.setChecked(up)
+                    act.triggered.connect(self._toggleMWUpdate)
+
             if item.childCount():
                 m.addSeparator()
                 act = m.addAction("Collapse All")
@@ -320,7 +335,6 @@ class SidebarTreeWidget(QTreeWidget):
             if item.fullname == "tag":
                 act = m.addAction("Refresh")
                 act.triggered.connect(self.refresh)
-
             elif item.fullname == "deck":
                 act = m.addAction("Add Deck")
                 act.triggered.connect(self._onTreeDeckAdd)
@@ -328,12 +342,6 @@ class SidebarTreeWidget(QTreeWidget):
                 act.triggered.connect(self.onEmptyAll)
                 act = m.addAction("Rebuild All Filters")
                 act.triggered.connect(self.onRebuildAll)
-                up = mw.col.conf.get('Blitzkrieg.updateOV', False)
-                act = m.addAction("Auto Update Overview")
-                act.setCheckable(True)
-                act.setChecked(up)
-                act.triggered.connect(self._toggleMWUpdate)
-
             elif item.fullname == "model":
                 act = m.addAction("Manage Model")
                 act.triggered.connect(self.onManageModel)
@@ -735,6 +743,11 @@ class SidebarTreeWidget(QTreeWidget):
     def _toggleMWUpdate(self):
         up = mw.col.conf.get('Blitzkrieg.updateOV', False)
         mw.col.conf['Blitzkrieg.updateOV'] = not up
+
+    def _toggleSortOption(self, item):
+        sort = not mw.col.conf.get('Blitzkrieg.sort_'+item.fullname,False)
+        mw.col.conf['Blitzkrieg.sort_'+item.fullname] = sort
+        self.browser.buildTree()
 
     def _changeDecks(self, item):
         up = mw.col.conf.get('Blitzkrieg.updateOV', False)
