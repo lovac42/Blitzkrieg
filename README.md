@@ -16,7 +16,8 @@ Shift+RClick to show alternative context menu.
 
 
 ### Search:
-The startswith and endswith options only searches full names not the subdeck or subtags.
+Search highlights are cleared on refresh or on exiting the browser.  
+The startswith and endswith options only searches full names not the subtree.  
 
 
 ## Night Mode Conflict Resolution:
