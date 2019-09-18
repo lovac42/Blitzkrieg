@@ -79,6 +79,7 @@ class SidebarTreeWidget(QTreeWidget):
             "pinTag":(
                 (1,"Show All",None,self._onTreeTagSelectAll),
                 (1,"Add Notes",None,self._onTreeTagAddCard),
+                (1,"Untag Selected","Untag",self._onTreeUnTag),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
                 (1,"Unpin",None,self._onTreePinDelete),
@@ -88,9 +89,9 @@ class SidebarTreeWidget(QTreeWidget):
                 (0,"Add Notes",None,self._onTreeTagAddCard),
                 (0,"Rename Leaf","Rename",self._onTreeTagRenameLeaf),
                 (0,"Rename Branch","Rename",self._onTreeTagRenameBranch),
+                (0,"Untag Selected","Untag",self._onTreeUnTag),
                 (0,"Delete","Delete",self._onTreeTagDelete),
                 (-1,),
-                (0,"Pin item",None,self._onTreePin),
                 (0,"Convert to decks","Convert",self._onTreeTag2Deck),
             ),
             "deck":(
@@ -101,7 +102,6 @@ class SidebarTreeWidget(QTreeWidget):
                 (0,"Export","Export",self._onTreeDeckExport),
                 (0,"Delete","Delete",self._onTreeDeckDelete),
                 (-1,),
-                (0,"Pin item",None,self._onTreePin),
                 (0,"Convert to tags","Convert",self._onTreeDeck2Tag),
             ),
             "dyn":(
@@ -111,8 +111,6 @@ class SidebarTreeWidget(QTreeWidget):
                 (0,"Options","Options",self._onTreeDeckOptions),
                 (0,"Export","Export",self._onTreeDeckExport),
                 (0,"Delete","Delete",self._onTreeDeckDelete),
-                (-1,),
-                (0,"Pin item",None,self._onTreePin),
             ),
             "fav":(
                 (1,"Rename","Rename",self._onTreeFavRename),
@@ -306,8 +304,12 @@ class SidebarTreeWidget(QTreeWidget):
 
         elif mw.app.keyboardModifiers()==Qt.ShiftModifier:
             if item.type != "group":
-                act = m.addAction("Mark/Unmark item (tmp)")
+                act = m.addAction("Mark/Unmark Item (tmp)")
                 act.triggered.connect(lambda:self._onTreeMark(item))
+                if item.type in ("deck","tag"):
+                    act = m.addAction("Pin Item")
+                    act.triggered.connect(lambda:self._onTreePin(item))
+
             act = m.addAction("Refresh")
             act.triggered.connect(self.refresh)
             if item.type == "group":
@@ -477,6 +479,14 @@ class SidebarTreeWidget(QTreeWidget):
 
     def _onTreeTagDelete(self, item):
         self.moveTag(item.fullname,rename=False)
+
+    def _onTreeUnTag(self, item):
+        sel = self.browser.selectedNotes()
+        tag = item.fullname
+        self.browser.model.beginReset()
+        mw.col.tags.bulkRem(sel,tag)
+        self.browser.model.endReset()
+        mw.requireReset()
 
     def _onTreeDeck2Tag(self, item):
         msg = _("Convert all notes in deck/subdecks to tags?")
@@ -690,10 +700,6 @@ class SidebarTreeWidget(QTreeWidget):
         item.setBackground(0, QBrush(color))
         item.setSelected(False)
 
-    def _onTreeMarkPinned(self, item):
-        tf=not self.marked[item.type].get(item.favname, False)
-        self.marked[item.type][item.favname]=tf
-
     def _onTreePin(self, item):
         name = "Pinned::%s"%(
             item.fullname.split("::")[-1])
@@ -701,6 +707,7 @@ class SidebarTreeWidget(QTreeWidget):
         if "savedFilters" not in mw.col.conf:
             mw.col.conf['savedFilters'] = {}
         mw.col.conf['savedFilters'][name] = search
+        self.browser.buildTree()
 
     def onEmptyAll(self):
         for d in mw.col.decks.all():
