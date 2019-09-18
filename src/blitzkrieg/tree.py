@@ -47,23 +47,23 @@ def favTree(browser, root):
                 item = browser.CallbackItem(
                     parent, name,
                     lambda s=filt: browser.setFilter(s),
-                    expanded=browser.sidebarTree.node_state.get(type).get(leaf_tag,True)
+                    expanded=root.node_state.get(type).get(leaf_tag,True)
                 )
                 item.type = type
                 item.fullname = fname or leaf_tag
                 item.favname = leaf_tag
                 item.setIcon(0, QIcon(":/icons/"+ico))
-                if browser.sidebarTree.marked[type].get(leaf_tag, False):
+                if root.marked[type].get(leaf_tag, False):
                     item.setBackground(0, QBrush(Qt.yellow))
                 favs_tree[leaf_tag] = item
 
 
 def userTagTree(browser, root):
-    root = browser.CallbackItem(root, _("Tags"), None, expanded=True)
-    root.type = "group"
-    root.fullname = "tag"
-    root.setExpanded(browser.sidebarTree.node_state.get("group").get('tag',True))
-    root.setIcon(0, QIcon(":/icons/tag.svg"))
+    rootNode = browser.CallbackItem(root, _("Tags"), None, expanded=True)
+    rootNode.type = "group"
+    rootNode.fullname = "tag"
+    rootNode.setExpanded(root.node_state.get("group").get('tag',True))
+    rootNode.setIcon(0, QIcon(":/icons/tag.svg"))
     tags_tree = {}
     SORT = browser.col.conf.get('Blitzkrieg.sort_tag',False)
     TAGS = sorted(browser.col.tags.all(),
@@ -75,8 +75,8 @@ def userTagTree(browser, root):
         for idx, name in enumerate(node):
             leaf_tag = '::'.join(node[0:idx + 1])
             if not tags_tree.get(leaf_tag):
-                parent = tags_tree['::'.join(node[0:idx])] if idx else root
-                exp = browser.sidebarTree.node_state.get('tag').get(leaf_tag,False)
+                parent = tags_tree['::'.join(node[0:idx])] if idx else rootNode
+                exp = root.node_state.get('tag').get(leaf_tag,False)
                 item = browser.CallbackItem(
                     parent, name,
                     lambda p=leaf_tag: browser.setFilter("tag",p),
@@ -85,9 +85,9 @@ def userTagTree(browser, root):
                 item.type = "tag"
                 item.fullname = leaf_tag
                 item.setIcon(0, QIcon(":/icons/tag.svg"))
-                if browser.sidebarTree.found.get(item.type,{}).get(leaf_tag, False):
+                if root.found.get(item.type,{}).get(leaf_tag, False):
                     item.setBackground(0, QBrush(Qt.cyan))
-                elif browser.sidebarTree.marked['tag'].get(leaf_tag, False):
+                elif root.marked['tag'].get(leaf_tag, False):
                     item.setBackground(0, QBrush(Qt.yellow))
                 elif exp and '::' not in leaf_tag:
                     item.setBackground(0, QBrush(QColor(0,0,10,10)))
@@ -95,18 +95,18 @@ def userTagTree(browser, root):
 
 
 def decksTree(browser, root):
-    root = browser.CallbackItem(root, _("Decks"), None, expanded=True)
-    root.type = "group"
-    root.fullname = "deck"
-    root.setExpanded(browser.sidebarTree.node_state.get("group").get('deck',True))
-    root.setIcon(0, QIcon(":/icons/deck.svg"))
+    rootNode = browser.CallbackItem(root, _("Decks"), None, expanded=True)
+    rootNode.type = "group"
+    rootNode.fullname = "deck"
+    rootNode.setExpanded(root.node_state.get("group").get('deck',True))
+    rootNode.setIcon(0, QIcon(":/icons/deck.svg"))
     SORT = browser.col.conf.get('Blitzkrieg.sort_deck',False)
     grps = sorted(browser.col.sched.deckDueTree(),
             key=lambda g: g[0].lower() if SORT else g[0])
-    def fillGroups(root, grps, head=""):
+    def fillGroups(rootNode, grps, head=""):
         for g in grps:
             item = browser.CallbackItem(
-                root, g[0],
+                rootNode, g[0],
                 lambda g=g: browser.setFilter("deck", head+g[0]),
                 lambda g=g: browser.mw.col.decks.collapseBrowser(g[1]),
                 not browser.mw.col.decks.get(g[1]).get('browserCollapsed', False))
@@ -119,21 +119,21 @@ def decksTree(browser, root):
                 if g[1]==1: #default deck
                     item.setForeground(0, QBrush(Qt.darkRed))
                 item.type = "deck"
-            if browser.sidebarTree.found.get(item.type,{}).get(item.fullname, False):
+            if root.found.get(item.type,{}).get(item.fullname, False):
                 item.setBackground(0, QBrush(Qt.cyan))
-            elif browser.sidebarTree.marked[item.type].get(item.fullname, False):
+            elif root.marked[item.type].get(item.fullname, False):
                 item.setBackground(0, QBrush(Qt.yellow))
             newhead = head + g[0]+"::"
             fillGroups(item, g[5], newhead)
-    fillGroups(root, grps)
+    fillGroups(rootNode, grps)
 
 
 def modelTree(browser, root):
-    root = browser.CallbackItem(root, _("Models"), None)
-    root.type = "group"
-    root.fullname = "model"
-    root.setExpanded(browser.sidebarTree.node_state.get("group").get('model',False))
-    root.setIcon(0, QIcon(":/icons/notetype.svg"))
+    rootNode = browser.CallbackItem(root, _("Models"), None)
+    rootNode.type = "group"
+    rootNode.fullname = "model"
+    rootNode.setExpanded(root.node_state.get("group").get('model',False))
+    rootNode.setIcon(0, QIcon(":/icons/notetype.svg"))
     models_tree = {}
     SORT = browser.col.conf.get('Blitzkrieg.sort_model',False)
     MODELS = sorted(browser.col.models.all(),
@@ -143,17 +143,17 @@ def modelTree(browser, root):
         for idx, name in enumerate(node):
             leaf_model = '::'.join(node[0:idx + 1])
             if not models_tree.get(leaf_model):
-                parent = models_tree['::'.join(node[0:idx])] if idx else root
+                parent = models_tree['::'.join(node[0:idx])] if idx else rootNode
                 item = browser.CallbackItem(
                     parent, name,
                     lambda m=m: browser.setFilter("mid", str(m['id'])),
-                    expanded=browser.sidebarTree.node_state.get('model').get(leaf_model,False)
+                    expanded=root.node_state.get('model').get(leaf_model,False)
                 )
                 item.type = "model"
                 item.fullname = leaf_model
                 item.setIcon(0, QIcon(":/icons/notetype.svg"))
-                if browser.sidebarTree.found.get(item.type,{}).get(leaf_model, False):
+                if root.found.get(item.type,{}).get(leaf_model, False):
                     item.setBackground(0, QBrush(Qt.cyan))
-                elif browser.sidebarTree.marked['model'].get(leaf_model, False):
+                elif root.marked['model'].get(leaf_model, False):
                     item.setBackground(0, QBrush(Qt.yellow))
                 models_tree[leaf_model] = item
