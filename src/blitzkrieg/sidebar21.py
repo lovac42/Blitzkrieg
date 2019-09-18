@@ -838,3 +838,68 @@ class SidebarTreeWidget(QTreeWidget):
         self.marked['pinDyn'] = {}
         self.marked['pinTag'] = {}
 
+
+
+class TagTreeWidget(QTreeWidget):
+    def __init__(self, browser, parent):
+        QTreeWidget.__init__(self, parent)
+        self.setHeaderHidden(True)
+        self.browser = browser
+        self.col = browser.col
+        self.node = {}
+        self.color = Qt.red
+
+        self.itemClicked.connect(self.onClick)
+        self.itemExpanded.connect(self.onCollapse)
+        self.itemCollapsed.connect(self.onCollapse)
+
+    def onClick(self, item, col):
+        item.setSelected(False)
+        s = not self.node.get(item.fullname,False)
+        self.node[item.fullname] = s
+        color = self.color if s else Qt.transparent
+        item.setBackground(0, QBrush(color))
+
+    def onCollapse(self, item):
+        try:
+            s = self.node.get(item.fullname,False)
+            color = self.color if s else Qt.transparent
+            item.setBackground(0, QBrush(color))
+        except AttributeError: pass
+
+    def removeTags(self, nids):
+        self.color = Qt.red
+        SORT = self.col.conf.get('Blitzkrieg.sort_tag',False)
+        tags = self.col.db.list("""
+select tags from notes where id in %s""" % ids2str(nids))
+        tags = sorted(" ".join(tags).split(),
+            key=lambda t: t.lower() if SORT else t)
+        self._setTags(tags)
+
+    def addTags(self):
+        self.color = Qt.green
+        SORT = self.col.conf.get('Blitzkrieg.sort_tag',False)
+        tags = sorted(self.col.tags.all(),
+                key=lambda t: t.lower() if SORT else t)
+        self._setTags(tags)
+
+    def _setTags(self, tags):
+        tags_tree = {}
+        for t in tags:
+            node = t.split('::')
+            for idx, name in enumerate(node):
+                leaf_tag = '::'.join(node[0:idx + 1])
+                if not tags_tree.get(leaf_tag):
+                    parent = tags_tree['::'.join(node[0:idx])] if idx else self
+                    item = self.browser.CallbackItem(
+                        parent, name,
+                        lambda p=leaf_tag: self.browser.setFilter("tag",p),
+                        expanded=True
+                    )
+                    item.type = "tag"
+                    item.fullname = leaf_tag
+                    item.setIcon(0, QIcon(":/icons/tag.svg"))
+                    if self.node.get(leaf_tag, False):
+                        item.setBackground(0, QBrush(self.color))
+                    tags_tree[leaf_tag] = item
+
