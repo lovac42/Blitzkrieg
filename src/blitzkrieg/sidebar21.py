@@ -318,6 +318,12 @@ class SidebarTreeWidget(QTreeWidget):
                 if item.type in ("deck","tag"):
                     act = m.addAction("Pin Item")
                     act.triggered.connect(lambda:self._onTreePin(item))
+                if item.type in ("pin","fav"):
+                    ico = mw.col.conf.get('Blitzkrieg.icon_fav', True)
+                    act = m.addAction("Show icon for paths")
+                    act.setCheckable(True)
+                    act.setChecked(ico)
+                    act.triggered.connect(lambda:self._toggleIconOption(item))
 
             act = m.addAction("Refresh")
             act.triggered.connect(self.refresh)
@@ -328,6 +334,12 @@ class SidebarTreeWidget(QTreeWidget):
                     act.setCheckable(True)
                     act.setChecked(sort)
                     act.triggered.connect(lambda:self._toggleSortOption(item))
+                if item.fullname in ("tag","model"):
+                    ico = mw.col.conf.get('Blitzkrieg.icon_'+item.fullname, True)
+                    act = m.addAction("Show icon for paths")
+                    act.setCheckable(True)
+                    act.setChecked(ico)
+                    act.triggered.connect(lambda:self._toggleIconOption(item))
                 if item.fullname == "deck":
                     up = mw.col.conf.get('Blitzkrieg.updateOV', False)
                     act = m.addAction("Auto Update Overview")
@@ -549,6 +561,9 @@ class SidebarTreeWidget(QTreeWidget):
             mw.col.tags.save()
             mw.col.tags.flush()
             mw.col.tags.registerNotes()
+            self.found = {}
+            self.found['tag'] = {}
+            self.found['tag'][item.fullname] = True
             mw.requireReset()
 
 
@@ -587,6 +602,9 @@ class SidebarTreeWidget(QTreeWidget):
             mw.col.tags.save()
             mw.col.tags.flush()
             mw.col.tags.registerNotes()
+            self.found = {}
+            self.found['deck'] = {}
+            self.found['deck'][item.fullname] = True
             mw.requireReset()
 
 
@@ -782,6 +800,12 @@ class SidebarTreeWidget(QTreeWidget):
         mw.col.conf['Blitzkrieg.sort_'+item.fullname] = sort
         self.browser.buildTree()
 
+    def _toggleIconOption(self, item):
+        TYPE='fav' if item.type in ("pin","fav") else item.fullname
+        ico = not mw.col.conf.get('Blitzkrieg.icon_'+TYPE,True)
+        mw.col.conf['Blitzkrieg.icon_'+TYPE] = ico
+        self.browser.buildTree()
+
     def _changeDecks(self, item):
         up = mw.col.conf.get('Blitzkrieg.updateOV', False)
         if up and item.type in ('deck','dyn','pinDeck','pinDyn') \
@@ -877,6 +901,7 @@ class TagTreeWidget(QTreeWidget):
         self.browser = browser
         self.col = browser.col
         self.node = {}
+        self.addMode = False
         self.color = Qt.red
 
         self.itemClicked.connect(self.onClick)
@@ -885,10 +910,11 @@ class TagTreeWidget(QTreeWidget):
 
     def onClick(self, item, col):
         item.setSelected(False)
-        s = not self.node.get(item.fullname,False)
-        self.node[item.fullname] = s
-        color = self.color if s else Qt.transparent
-        item.setBackground(0, QBrush(color))
+        if self.addMode or item.type=="tag":
+            s = not self.node.get(item.fullname,False)
+            self.node[item.fullname] = s
+            color = self.color if s else Qt.transparent
+            item.setBackground(0, QBrush(color))
 
     def onCollapse(self, item):
         try:
@@ -898,6 +924,7 @@ class TagTreeWidget(QTreeWidget):
         except AttributeError: pass
 
     def removeTags(self, nids):
+        self.addMode = False
         self.color = Qt.red
         SORT = self.col.conf.get('Blitzkrieg.sort_tag',False)
         tags = self.col.db.list("""
@@ -907,6 +934,7 @@ select tags from notes where id in %s""" % ids2str(nids))
         self._setTags(tags)
 
     def addTags(self):
+        self.addMode = True
         self.color = Qt.green
         SORT = self.col.conf.get('Blitzkrieg.sort_tag',False)
         tags = sorted(self.col.tags.all(),
@@ -922,11 +950,9 @@ select tags from notes where id in %s""" % ids2str(nids))
                 if not tags_tree.get(leaf_tag):
                     parent = tags_tree['::'.join(node[0:idx])] if idx else self
                     item = QTreeWidgetItem(parent,[name])
-                    item.type = "tag"
                     item.fullname = leaf_tag
                     item.setExpanded(True)
-                    item.setIcon(0, QIcon(":/icons/tag.svg"))
-                    if self.node.get(leaf_tag, False):
-                        item.setBackground(0, QBrush(self.color))
                     tags_tree[leaf_tag] = item
+            item.type = "tag"
+            item.setIcon(0, QIcon(":/icons/tag.svg"))
 

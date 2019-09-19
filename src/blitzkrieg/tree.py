@@ -41,6 +41,7 @@ def favTree(browser, root):
                     fname = filt[5:-1]
                     filt='"deck'+filt[4:]
 
+            item = None
             leaf_tag = '::'.join(node[0:idx + 1])
             if not favs_tree.get(leaf_tag):
                 parent = favs_tree['::'.join(node[0:idx])] if idx else root
@@ -52,13 +53,17 @@ def favTree(browser, root):
                 item.type = type
                 item.fullname = fname or leaf_tag
                 item.favname = leaf_tag
-                item.setIcon(0, QIcon(":/icons/"+ico))
+                if not idx or browser.col.conf.get('Blitzkrieg.icon_fav',True):
+                    item.setIcon(0, QIcon(":/icons/"+ico))
                 if root.marked[type].get(leaf_tag, False):
                     item.setBackground(0, QBrush(Qt.yellow))
                 favs_tree[leaf_tag] = item
+        item.setIcon(0, QIcon(":/icons/"+ico))
 
 
 def userTagTree(browser, root):
+    ico = QIcon(":/icons/tag.svg")
+    icoOpt = browser.col.conf.get('Blitzkrieg.icon_tag',True)
     rootNode = browser.CallbackItem(root, _("Tags"), None, expanded=True)
     rootNode.type = "group"
     rootNode.fullname = "tag"
@@ -71,6 +76,7 @@ def userTagTree(browser, root):
     for t in TAGS:
         if t.lower() == "marked" or t.lower() == "leech":
             continue
+        item = None
         node = t.split('::')
         for idx, name in enumerate(node):
             leaf_tag = '::'.join(node[0:idx + 1])
@@ -84,7 +90,8 @@ def userTagTree(browser, root):
                 )
                 item.type = "tag"
                 item.fullname = leaf_tag
-                item.setIcon(0, QIcon(":/icons/tag.svg"))
+                if icoOpt:
+                    item.setIcon(0, ico)
                 if root.found.get(item.type,{}).get(leaf_tag, False):
                     item.setBackground(0, QBrush(Qt.cyan))
                 elif root.marked['tag'].get(leaf_tag, False):
@@ -92,6 +99,7 @@ def userTagTree(browser, root):
                 elif exp and '::' not in leaf_tag:
                     item.setBackground(0, QBrush(QColor(0,0,10,10)))
                 tags_tree[leaf_tag] = item
+        item.setIcon(0, ico)
 
 
 def decksTree(browser, root):
@@ -129,6 +137,8 @@ def decksTree(browser, root):
 
 
 def modelTree(browser, root):
+    ico = QIcon(":/icons/notetype.svg")
+    icoOpt = browser.col.conf.get('Blitzkrieg.icon_model',True)
     rootNode = browser.CallbackItem(root, _("Models"), None)
     rootNode.type = "group"
     rootNode.fullname = "model"
@@ -139,6 +149,7 @@ def modelTree(browser, root):
     MODELS = sorted(browser.col.models.all(),
             key=lambda m: m["name"].lower() if SORT else m["name"])
     for m in MODELS:
+        item = None
         node = m['name'].split('::')
         for idx, name in enumerate(node):
             leaf_model = '::'.join(node[0:idx + 1])
@@ -151,9 +162,11 @@ def modelTree(browser, root):
                 )
                 item.type = "model"
                 item.fullname = leaf_model
-                item.setIcon(0, QIcon(":/icons/notetype.svg"))
+                if icoOpt:
+                    item.setIcon(0, ico)
                 if root.found.get(item.type,{}).get(leaf_model, False):
                     item.setBackground(0, QBrush(Qt.cyan))
                 elif root.marked['model'].get(leaf_model, False):
                     item.setBackground(0, QBrush(Qt.yellow))
                 models_tree[leaf_model] = item
+        item.setIcon(0, ico)

@@ -84,6 +84,7 @@ def replace_deleteTags(browser, tags=None, label=None):
         browser.mw.checkpoint(label)
         browser.model.beginReset()
         browser.col.tags.bulkRem(nids,tags)
+        browser.col.tags.registerNotes()
         browser.model.endReset()
         browser.mw.requireReset()
 
