@@ -144,7 +144,11 @@ class SidebarTreeWidget(QTreeWidget):
     def onTreeClick(self, item, col):
         #In Qt5, right click does not trigger this method.
         if getattr(item, 'onclick', None):
-            item.onclick()
+            if item.type=='tag' and \
+            mw.col.conf.get('Blitzkrieg.showAllTags', False):
+                self._onTreeTagSelectAll(item)
+            else:
+                item.onclick()
             self.timer=mw.progress.timer(
                 20, lambda:self._changeDecks(item), False)
 
@@ -330,6 +334,12 @@ class SidebarTreeWidget(QTreeWidget):
                     act.setCheckable(True)
                     act.setChecked(up)
                     act.triggered.connect(self._toggleMWUpdate)
+                elif item.fullname == "tag":
+                    sa = mw.col.conf.get('Blitzkrieg.showAllTags', False)
+                    act = m.addAction("Auto Show Subtags")
+                    act.setCheckable(True)
+                    act.setChecked(sa)
+                    act.triggered.connect(self._toggleShowSubtags)
 
             if item.childCount():
                 m.addSeparator()
@@ -423,8 +433,8 @@ class SidebarTreeWidget(QTreeWidget):
             mw.onExport(did=deck['id'])
         mw.reset(True)
 
-    def _onTreeDeckAdd(self, item):
-        default=item.fullname+"::" if item.type=='deck' else ''
+    def _onTreeDeckAdd(self, item=None):
+        default=item.fullname+"::" if item and item.type=='deck' else ''
         deck = getOnlyText(_("Name for deck:"),default=default)
         if deck:
             mw.col.decks.id(deck)
@@ -460,7 +470,7 @@ class SidebarTreeWidget(QTreeWidget):
         diag.editor.tags.setText(item.fullname)
 
     def _onTreeTagSelectAll(self, item):
-        self.onTreeClick(item, 0)
+        item.onclick()
         el = self.browser.form.searchEdit.lineEdit()
         el.setText(el.text()+"*")
         self.browser.onSearchActivated()
@@ -762,6 +772,10 @@ class SidebarTreeWidget(QTreeWidget):
     def _toggleMWUpdate(self):
         up = mw.col.conf.get('Blitzkrieg.updateOV', False)
         mw.col.conf['Blitzkrieg.updateOV'] = not up
+
+    def _toggleShowSubtags(self):
+        sa = mw.col.conf.get('Blitzkrieg.showAllTags', False)
+        mw.col.conf['Blitzkrieg.showAllTags'] = not sa
 
     def _toggleSortOption(self, item):
         sort = not mw.col.conf.get('Blitzkrieg.sort_'+item.fullname,False)
