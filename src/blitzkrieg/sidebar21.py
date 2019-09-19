@@ -79,6 +79,7 @@ class SidebarTreeWidget(QTreeWidget):
             "pinTag":(
                 (1,"Show All",None,self._onTreeTagSelectAll),
                 (1,"Add Notes",None,self._onTreeTagAddCard),
+                (1,"Tag Selected","Tag",self._onTreeTag),
                 (1,"Untag Selected","Untag",self._onTreeUnTag),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
@@ -89,6 +90,7 @@ class SidebarTreeWidget(QTreeWidget):
                 (0,"Add Notes",None,self._onTreeTagAddCard),
                 (0,"Rename Leaf","Rename",self._onTreeTagRenameLeaf),
                 (0,"Rename Branch","Rename",self._onTreeTagRenameBranch),
+                (0,"Tag Selected","Tag",self._onTreeTag),
                 (0,"Untag Selected","Untag",self._onTreeUnTag),
                 (0,"Delete","Delete",self._onTreeTagDelete),
                 (-1,),
@@ -140,6 +142,7 @@ class SidebarTreeWidget(QTreeWidget):
             super().keyPressEvent(evt)
 
     def onTreeClick(self, item, col):
+        #In Qt5, right click does not trigger this method.
         if getattr(item, 'onclick', None):
             item.onclick()
             self.timer=mw.progress.timer(
@@ -165,7 +168,9 @@ class SidebarTreeWidget(QTreeWidget):
         # Dealing with qt serialized data is a headache,
         # so I'm just going to save a reference to the dropped item.
         # data.data('application/x-qabstractitemmodeldatalist')
-        self.dropItem = parent
+        if isinstance(parent.type, str):
+            #clear item to allow dropping to groups
+            self.dropItem = parent if parent.type!='group' else None
         return True
 
 
@@ -480,13 +485,20 @@ class SidebarTreeWidget(QTreeWidget):
     def _onTreeTagDelete(self, item):
         self.moveTag(item.fullname,rename=False)
 
-    def _onTreeUnTag(self, item):
+
+    def _onTreeTag(self, item, add=True):
         sel = self.browser.selectedNotes()
         tag = item.fullname
         self.browser.model.beginReset()
-        mw.col.tags.bulkRem(sel,tag)
+        if add:
+            mw.col.tags.bulkAdd(sel,tag)
+        else:
+            mw.col.tags.bulkRem(sel,tag)
         self.browser.model.endReset()
         mw.requireReset()
+
+    def _onTreeUnTag(self, item):
+        self._onTreeTag(item,False)
 
     def _onTreeDeck2Tag(self, item):
         msg = _("Convert all notes in deck/subdecks to tags?")
@@ -800,6 +812,10 @@ class SidebarTreeWidget(QTreeWidget):
         if not txt:
             return
         options = Qt.MatchRecursive
+        if txt=='vote for pedro':
+            mw.pm.profile['Blitzkrieg.VFP']=True
+            from .alt import disabledDebugStuff
+            disabledDebugStuff()
         self.finder['txt'] = txt
         self.finder['case'] = frm.cb_case.isChecked()
         if self.finder['case']:
@@ -891,13 +907,10 @@ select tags from notes where id in %s""" % ids2str(nids))
                 leaf_tag = '::'.join(node[0:idx + 1])
                 if not tags_tree.get(leaf_tag):
                     parent = tags_tree['::'.join(node[0:idx])] if idx else self
-                    item = self.browser.CallbackItem(
-                        parent, name,
-                        lambda p=leaf_tag: self.browser.setFilter("tag",p),
-                        expanded=True
-                    )
+                    item = QTreeWidgetItem(parent,[name])
                     item.type = "tag"
                     item.fullname = leaf_tag
+                    item.setExpanded(True)
                     item.setIcon(0, QIcon(":/icons/tag.svg"))
                     if self.node.get(leaf_tag, False):
                         item.setBackground(0, QBrush(self.color))

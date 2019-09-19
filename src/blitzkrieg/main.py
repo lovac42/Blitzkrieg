@@ -14,10 +14,7 @@ from anki.hooks import addHook
 
 from .sidebar21 import SidebarTreeWidget
 from .tree import *
-from .const import CCBC
-
-if CCBC:
-    from .alt import *
+from .alt import *
 
 
 browserInstance=None
