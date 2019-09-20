@@ -229,7 +229,8 @@ class SidebarTreeWidget(QTreeWidget):
         except DeckRenameError as e:
             showWarning(e.description)
         mw.col.decks.get(dropDid)['browserCollapsed'] = False
-        self.highlight('deck',dragDeck['name'])
+        # Adding HL here gets really annoying
+        # self.highlight('deck',dragDeck['name'])
 
     def moveFav(self, dragName, newName=""):
         try:
@@ -661,6 +662,7 @@ class SidebarTreeWidget(QTreeWidget):
         oldNameArr[-1] = newName
         newName = "::".join(oldNameArr)
         self.moveModel(item.fullname,newName)
+        self.highlight('model',newName)
 
     def _onTreeModelRenameBranch(self, item):
         self.browser._lastSearchTxt=""
@@ -670,6 +672,7 @@ class SidebarTreeWidget(QTreeWidget):
         if not newName or newName == item.fullname:
             return
         self.moveModel(item.fullname,newName)
+        self.highlight('model',newName)
 
     def _onTreeModelDelete(self, item):
         self.browser._lastSearchTxt=""
@@ -908,7 +911,14 @@ class SidebarTreeWidget(QTreeWidget):
             del(self.marked[type][name])
         self.marked[type][name] = True
         mw.progress.timer(100,unhighlight,False)
-
+        if type == 'deck':
+            return
+        #set parent expanded
+        nodes=name.split('::')
+        while len(nodes)>1:
+            nodes.pop()
+            n='::'.join(nodes)
+            self.node_state[type][n] = True
 
 
 
