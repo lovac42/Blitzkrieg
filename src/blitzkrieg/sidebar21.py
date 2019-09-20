@@ -468,6 +468,7 @@ class SidebarTreeWidget(QTreeWidget):
         mw.deckBrowser._rename(sel['id'])
         mw.col.decks.save()
         mw.col.decks.flush()
+        self.highlight('deck',sel['name'])
         mw.reset(True)
 
     def _onTreeDeckAddCard(self, item):
@@ -496,6 +497,7 @@ class SidebarTreeWidget(QTreeWidget):
         oldNameArr[-1] = newName
         newName = "::".join(oldNameArr)
         self.moveTag(item.fullname,newName)
+        self.highlight('tag',newName)
 
     def _onTreeTagRenameBranch(self, item):
         newName = getOnlyText(_("New tag name:"),default=item.fullname)
@@ -503,6 +505,7 @@ class SidebarTreeWidget(QTreeWidget):
         if not newName or newName == item.fullname:
             return
         self.moveTag(item.fullname,newName)
+        self.highlight('tag',newName)
 
     def _onTreeTagDelete(self, item):
         self.moveTag(item.fullname,rename=False)
@@ -537,13 +540,16 @@ class SidebarTreeWidget(QTreeWidget):
             actv = sorted(actv, key=lambda t: t[0])
             actv.insert(0,(item.fullname,parentDid))
 
+            found = False
             for name,did in actv:
                 mw.progress.update(label=name)
                 #add subdeck tree structure as tags
                 nids = f.findNotes('''"deck:%s" -"deck:%s::*"'''%(name,name))
-                tagName = re.sub(r"\s*(::)\s*","\g<1>",name)
-                tagName = re.sub(r"\s+","_",tagName)
-                mw.col.tags.bulkAdd(nids, tagName)
+                if nids:
+                    found = True
+                    tagName = re.sub(r"\s*(::)\s*","\g<1>",name)
+                    tagName = re.sub(r"\s+","_",tagName)
+                    mw.col.tags.bulkAdd(nids, tagName)
                 #skip parent or dyn decks
                 if did == parentDid or mw.col.decks.get(did)['dyn']:
                     continue
@@ -556,14 +562,15 @@ class SidebarTreeWidget(QTreeWidget):
                 mw.col.decks.rem(did,childrenToo=False)
         finally:
             mw.progress.finish()
+            if not found:
+                showInfo("No Cards in deck")
+                return
             mw.col.decks.save()
             mw.col.decks.flush()
             mw.col.tags.save()
             mw.col.tags.flush()
+            self.highlight('tag',item.fullname)
             mw.col.tags.registerNotes()
-            self.found = {}
-            self.found['tag'] = {}
-            self.found['tag'][item.fullname] = True
             mw.requireReset()
 
 
@@ -571,6 +578,8 @@ class SidebarTreeWidget(QTreeWidget):
         def tag2Deck(tag):
             did = mw.col.decks.id(tag)
             cids = f.findCards('"tag:%s"'%tag)
+            if not cids:
+                return
             mw.col.sched.remFromDyn(cids)
             mw.col.db.execute(
                 "update cards set usn=?, mod=?, did=? where id in %s"%ids2str(cids),
@@ -601,10 +610,8 @@ class SidebarTreeWidget(QTreeWidget):
             mw.col.decks.flush()
             mw.col.tags.save()
             mw.col.tags.flush()
+            self.highlight('deck',item.fullname)
             mw.col.tags.registerNotes()
-            self.found = {}
-            self.found['deck'] = {}
-            self.found['deck'][item.fullname] = True
             mw.requireReset()
 
 
@@ -893,6 +900,16 @@ class SidebarTreeWidget(QTreeWidget):
         self.marked['pinTag'] = {}
 
 
+    def highlight(self, type, name):
+        def unhighlight():
+            del(self.marked[type][name])
+        self.marked[type][name] = True
+        mw.progress.timer(100,unhighlight,False)
+
+
+
+
+
 
 class TagTreeWidget(QTreeWidget):
     def __init__(self, browser, parent):
@@ -933,17 +950,22 @@ select tags from notes where id in %s""" % ids2str(nids))
             key=lambda t: t.lower() if SORT else t)
         self._setTags(tags)
 
-    def addTags(self):
+    def addTags(self, nids):
         self.addMode = True
         self.color = Qt.green
         SORT = self.col.conf.get('Blitzkrieg.sort_tag',False)
-        tags = sorted(self.col.tags.all(),
+        allTags = sorted(self.col.tags.all(),
                 key=lambda t: t.lower() if SORT else t)
-        self._setTags(tags)
+        tags = self.col.db.list("""
+select tags from notes where id in %s""" % ids2str(nids))
+        tags = set(" ".join(tags).split())
+        self._setTags(allTags,tags)
 
-    def _setTags(self, tags):
+    def _setTags(self, allTags, curTags=""):
         tags_tree = {}
-        for t in tags:
+        for t in allTags:
+            if self.addMode and t.lower() in ("marked","leech"):
+                continue
             node = t.split('::')
             for idx, name in enumerate(node):
                 leaf_tag = '::'.join(node[0:idx + 1])
@@ -953,6 +975,9 @@ select tags from notes where id in %s""" % ids2str(nids))
                     item.fullname = leaf_tag
                     item.setExpanded(True)
                     tags_tree[leaf_tag] = item
-            item.type = "tag"
-            item.setIcon(0, QIcon(":/icons/tag.svg"))
-
+                    if leaf_tag in curTags:
+                        item.setBackground(0, QBrush(Qt.yellow))
+            try:
+                item.type = "tag"
+                item.setIcon(0, QIcon(":/icons/tag.svg"))
+            except AttributeError: pass

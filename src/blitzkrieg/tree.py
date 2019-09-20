@@ -58,7 +58,9 @@ def favTree(browser, root):
                 if root.marked[type].get(leaf_tag, False):
                     item.setBackground(0, QBrush(Qt.yellow))
                 favs_tree[leaf_tag] = item
-        item.setIcon(0, QIcon(":/icons/"+ico))
+        try:
+            item.setIcon(0, QIcon(":/icons/"+ico))
+        except AttributeError: pass
 
 
 def userTagTree(browser, root):
@@ -99,8 +101,9 @@ def userTagTree(browser, root):
                 elif exp and '::' not in leaf_tag:
                     item.setBackground(0, QBrush(QColor(0,0,10,10)))
                 tags_tree[leaf_tag] = item
-        item.setIcon(0, ico)
-
+        try:
+            item.setIcon(0, ico)
+        except AttributeError: pass
 
 def decksTree(browser, root):
     rootNode = browser.CallbackItem(root, _("Decks"), None, expanded=True)
@@ -169,4 +172,6 @@ def modelTree(browser, root):
                 elif root.marked['model'].get(leaf_model, False):
                     item.setBackground(0, QBrush(Qt.yellow))
                 models_tree[leaf_model] = item
-        item.setIcon(0, ico)
+        try:
+            item.setIcon(0, ico)
+        except AttributeError: pass

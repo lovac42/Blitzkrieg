@@ -29,7 +29,7 @@ def replace_addTags(browser, tags=None, label=None, *args, **kwargs):
         d.setWindowTitle(label)
         d.resize(360, 340)
         tagTree = TagTreeWidget(browser,d)
-        tagTree.addTags()
+        tagTree.addTags(nids)
         line = QLineEdit(d)
         layout = QVBoxLayout(d)
         layout.setContentsMargins(0, 0, 0, 0)
