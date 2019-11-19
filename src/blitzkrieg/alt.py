@@ -5,13 +5,15 @@
 # Support: https://github.com/lovac42/Blitzkrieg
 
 
-# Nothing to see here, this is used for debugging stuff only.
+# This is used for debugging and other stuff, yada yada.
+# Nothing to see here, just move along...
 
 from aqt import mw
 from aqt.qt import *
 from anki.lang import _
 from anki.hooks import addHook
 from aqt.browser import Browser
+from aqt.tagedit import TagEdit
 
 from .sidebar21 import TagTreeWidget
 
@@ -30,10 +32,14 @@ def replace_addTags(browser, tags=None, label=None, *args, **kwargs):
         d.resize(360, 340)
         tagTree = TagTreeWidget(browser,d)
         tagTree.addTags(nids)
-        line = QLineEdit(d)
+        line = TagEdit(d)
+        line.setCol(browser.col)
         layout = QVBoxLayout(d)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(QLabel(_("""Select tags and close dialog, green items will be added.""")))
+        layout.addWidget(QLabel(_("""\
+Select tags and close dialog: \
+Yellow is for existing tags. \
+Green items will be added.""")))
         layout.addWidget(tagTree)
         layout.addWidget(QLabel(_("Add Extra Tags:")))
         layout.addWidget(line)
@@ -69,7 +75,9 @@ def replace_deleteTags(browser, tags=None, label=None):
         tagTree.removeTags(nids)
         layout = QVBoxLayout(d)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(QLabel(_("""Select tags and close dialog, red items will be deleted.""")))
+        layout.addWidget(QLabel(_("""\
+Select tags and close dialog. \
+Red items will be deleted.""")))
         layout.addWidget(tagTree)
         d.exec_()
 

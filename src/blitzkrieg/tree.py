@@ -105,6 +105,12 @@ def userTagTree(browser, root):
             item.setIcon(0, ico)
         except AttributeError: pass
 
+    totTags=len(TAGS)
+    if totTags>1000:
+        rootNode.setText(0, _("Tags (Warning: too many tags)"))
+    rootNode.setToolTip(0, _("Total: %d tags"%totTags))
+
+
 def decksTree(browser, root):
     rootNode = browser.CallbackItem(root, _("Decks"), None, expanded=True)
     rootNode.type = "group"
@@ -137,6 +143,11 @@ def decksTree(browser, root):
             newhead = head + g[0]+"::"
             fillGroups(item, g[5], newhead)
     fillGroups(rootNode, grps)
+
+    tot=len(grps)
+    if tot>500:
+        rootNode.setText(0, _("Decks (Warning: too many decks)"))
+    rootNode.setToolTip(0, _("Total: %d decks"%tot))
 
 
 def modelTree(browser, root):
@@ -175,3 +186,8 @@ def modelTree(browser, root):
         try:
             item.setIcon(0, ico)
         except AttributeError: pass
+
+    tot=len(MODELS)
+    if tot>300:
+        rootNode.setText(0, _("Decks (Warning: too many models)"))
+    rootNode.setToolTip(0, _("Total: %d models"%tot))
