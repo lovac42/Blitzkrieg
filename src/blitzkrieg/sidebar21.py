@@ -920,6 +920,9 @@ class SidebarTreeWidget(QTreeWidget):
                 itm.setBackground(0, QBrush(Qt.cyan))
                 self.found[TAG_TYPE][itm.fullname] = True
 
+        if not self.found[TAG_TYPE]:
+            showInfo("Found nothing, nada, zilch!")
+
 
     def refresh(self):
         self.found = {}
