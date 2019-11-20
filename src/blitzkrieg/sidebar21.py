@@ -190,26 +190,38 @@ class SidebarTreeWidget(QTreeWidget):
             event.accept()
             return
         QAbstractItemView.dropEvent(self, event)
-        if not self.dropItem or \
-        self.dropItem.type == dgType or \
-        self.dropItem.type == dgType[:3]: #pin
-            mw.checkpoint("Dragged "+dgType)
-            dragName,dropName = self._getItemNames(dragItem)
-            parse = mw.col.decks #used for parsing '::' separators
-            cb = None
-            if dgType in ("deck", "dyn"):
-                self._deckDropEvent(dgType,dragName,dropName)
-            elif dgType == "tag":
-                cb = self.moveTag
-            elif dgType == "model":
-                cb = self.moveModel
-            elif dgType[:3] in ("fav","pin"):
-                cb = self.moveFav
-            if cb:
-                self._strDropEvent(dragName,dropName,cb)
-                self.node_state[dgType][dropName] = True
-        mw.col.setMod()
-        self.browser.buildTree()
+        self.mw.progress.timer(10,
+            lambda:self.dropEventHandler(dragItem),
+            False
+        )
+
+    def dropEventHandler(self, dragItem):
+        self.mw.progress.start(label=_("Processing..."))
+        # TODO: add prog update to each move OP
+        dgType = dragItem.type
+        try:
+            if not self.dropItem or \
+            self.dropItem.type == dgType or \
+            self.dropItem.type == dgType[:3]: #pin
+                mw.checkpoint("Dragged "+dgType)
+                dragName,dropName = self._getItemNames(dragItem)
+                parse = mw.col.decks #used for parsing '::' separators
+                cb = None
+                if dgType in ("deck", "dyn"):
+                    self._deckDropEvent(dgType,dragName,dropName)
+                elif dgType == "tag":
+                    cb = self.moveTag
+                elif dgType == "model":
+                    cb = self.moveModel
+                elif dgType[:3] in ("fav","pin"):
+                    cb = self.moveFav
+                if cb:
+                    self._strDropEvent(dragName,dropName,cb)
+                    self.node_state[dgType][dropName] = True
+        finally:
+            self.mw.progress.finish()
+            mw.col.setMod()
+            self.browser.buildTree()
 
 
     def _strDropEvent(self, dragName, dropName, callback):
