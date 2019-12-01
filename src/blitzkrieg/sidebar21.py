@@ -313,7 +313,9 @@ class SidebarTreeWidget(QTreeWidget):
                     nn = tag.replace(dragName+"::", newName+"::", 1)
                     mw.col.tags.bulkAdd(ids,nn)
                     self.node_state['tag'][nn]=True
-                self._swapHighlight('tag',tag,nn,rename)
+                    self._swapHighlight('tag',tag,nn,rename)
+                else:
+                    self._swapHighlight('tag',tag,newName,rename)
                 mw.col.tags.bulkRem(ids,tag)
         # rename parent
         ids = f.findNotes('"tag:%s"'%dragName)
