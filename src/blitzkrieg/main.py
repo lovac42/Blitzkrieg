@@ -9,12 +9,31 @@
 import re
 from aqt import mw
 from aqt.qt import *
-from aqt.browser import Browser
 from anki.hooks import addHook
+from aqt.browser import Browser
+from anki.lang import _
 
-from .sidebar21 import SidebarTreeWidget
+from .sidebar21 import SidebarTreeView
 from .tree import *
 from .alt import *
+
+
+try: #was fixed on 2.1.17beta3
+    from aqt.browser import SidebarItem, SidebarModel
+    from .patch_sidebar import SidebarItem as SBI, SidebarModel as SBM
+    SidebarItem.__init__=SBI.__init__
+    SidebarModel.data=SBM.data
+    SidebarModel.flags=SBM.flags
+    SidebarModel.supportedDropActions=SBM.supportedDropActions
+
+except: #SHOULD_PATCH
+    from .patch_sidebar import SidebarItem, SidebarModel
+    from .patch_old_anki import *
+    Browser.maybeRefreshSidebar = bc_maybeRefreshSidebar
+    Browser.setupSidebar = bc_setupSidebar
+    Browser.onSidebarVisChanged = bc_onSidebarVisChanged
+    # print("patched browser code for addon:Blitzkrieg")
+
 
 
 browserInstance=None
@@ -23,23 +42,29 @@ def replace_buildTree(self):
     global browserInstance
     browserInstance = self
     self.sidebarTree.browser = self
-    self.sidebarTree.clear()
-    root = self.sidebarTree
-    self._stdTree(root)
+
+    root = SidebarItem("", "")
+
+    try: #addons compatibility
+        self._stdTree(root) #2.1.17++
+    except TypeError:
+        stdTree(self,root) #2.1.16--
+
     favTree(self,root)
     decksTree(self,root)
     modelTree(self,root)
     userTagTree(self,root)
-    self.sidebarTree.setIndentation(15)
+    return root
 
 
-Browser.SidebarTreeWidget = SidebarTreeWidget
+
+Browser.SidebarTreeView = SidebarTreeView
 Browser.buildTree = replace_buildTree
 
 
 def onRevertedState(stateName):
     tok=stateName.split()[-1]
     if tok in browserInstance.sidebarTree.node_state.keys():
-        browserInstance.buildTree()
+        browserInstance.sidebarTree.refresh()
 addHook("revertedState", onRevertedState)
 
