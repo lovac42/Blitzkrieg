@@ -159,8 +159,8 @@ def decksTree(browser, root):
                 lambda expanded, g=g: browser.mw.col.decks.collapseBrowser(g[1]),
                 not browser.mw.col.decks.get(g[1]).get('browserCollapsed', False))
             rootNode.addChild(item)
-            item.fullname = head + g[0]
-            if mw.col.decks.byName(item.fullname)['dyn']:
+            item.fullname = head + g[0] #name
+            if mw.col.decks.isDyn(g[1]): #id
                 item.foreground = QBrush(Qt.blue)
                 item.type = "dyn"
             else:
