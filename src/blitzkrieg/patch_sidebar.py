@@ -99,12 +99,12 @@ class SidebarModel(QAbstractItemModel):
             return QVariant(item.name)
         elif role == Qt.DecorationRole:
             return QVariant(self.iconFromRef(item.icon))
-        elif role == Qt.ToolTipRole:
-            return QVariant(item.tooltip)
-        elif role == Qt.ForegroundRole:
-            return QVariant(item.foreground)
         elif role == Qt.BackgroundRole:
             return QVariant(item.background)
+        elif role == Qt.ForegroundRole:
+            return QVariant(item.foreground)
+        elif role == Qt.ToolTipRole:
+            return QVariant(item.tooltip)
         else:
             return QVariant()
 
