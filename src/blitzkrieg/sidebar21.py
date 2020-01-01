@@ -318,9 +318,11 @@ class SidebarTreeView(QTreeView):
             callback(dragName, dropName + "::" + parse._basename(dragName), dragItem, dropItem)
 
     def _deckDropEvent(self, dgType, dragName, dropName):
-        #TODO: sub-decks are not rehighlighted when dragging from parent deck.
         parse = mw.col.decks #used for parsing '::' separators
         dragDeck = parse.byName(dragName)
+        if not dragDeck: #parent was moved first
+            return
+
         dragDid = dragDeck["id"]
         dropDid = None
         try:
