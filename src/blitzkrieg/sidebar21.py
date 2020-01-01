@@ -255,6 +255,8 @@ class SidebarTreeView(QTreeView):
         )
 
     def dropEventHandler(self, dropItem, dragItems):
+        refreshMW=False
+        self.browser._lastSearchTxt=""
         self.mw.progress.start(label=_("Processing...")) #doesn't always show up
         try:
             for item in dragItems:
@@ -271,6 +273,7 @@ class SidebarTreeView(QTreeView):
                     parse = mw.col.decks #used for parsing '::' separators
                     cb = None
                     if dgType in ("deck", "dyn"):
+                        refreshMW=True
                         self._deckDropEvent(dgType,dragName,dropName)
                     elif dgType == "tag":
                         cb = self.moveTag
@@ -285,6 +288,8 @@ class SidebarTreeView(QTreeView):
             self.mw.progress.finish()
             mw.col.setMod()
             self.browser.maybeRefreshSidebar()
+            if refreshMW:
+                mw.reset()
 
     def _getItemNames(self, dropItem, dragItem):
         try: #type fav or pin
