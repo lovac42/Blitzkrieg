@@ -1,4 +1,4 @@
-## Blitzkrieg: Advanced Browser Sidebar
+## Blitzkrieg II: Advanced Browser Sidebar
 
 ## About Blitzkrieg:
 Advanced Browser Sidebar -- add more features to the card browser sidebar.
@@ -8,12 +8,10 @@ Advanced Browser Sidebar is an Anki add-on that aims to add useful features or e
 <i>(Plagiarized text from Advanced Browser for the humor.)</i>
 
 
-## Screenshots:
+## Quick Demo:
 
 <img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/demo.gif?raw=true">  
 
-
-<img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/autoupdate.png?raw=true">  
 
 ## Operations:
 Drag and drop items.  
@@ -21,22 +19,26 @@ Right-Click to show context menu.
 Shift+RClick to show alternative context menu.  
 
 
+### Highlights:
+Manual HLs are saved when you exit the browser, they are not saved if you exit Anki.
+
+
 ### Search:
 Search highlights are cleared on refresh or on exiting the browser.  
-The startswith and endswith options only searches full names not the subtree.  
 
 <img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/finder.png?raw=true">  
 
 
-### Highlights:
-Manual HLs are saved when you exit the browser, they are not saved if you exit Anki. Auto HLs from rename operations are cleared when you refresh or exit the browser. When you rename a tag or a deck, auto HL uses the same color. This maybe confusing, but it's the best I can do right now unless you have a super fast machine that lets me animate and fade away these action events.
+### Batch Operations:
+Batch operations was added in Blitzkrieg II v0.1.0. Only some operatons * are supported.
 
-<img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/highlights.png?raw=true">  
+<img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/bulkOp.png?raw=true">  
 
-## Performance:
-Warning: Performance is questionable with more items. Keep it under 2000 items total. Plus or minus 20% per CPU depending on system speed.
 
-<img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/sidebar_item_count.png?raw=true">  
+### Others:
+<img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/itemSize.png?raw=true">  
+
+<img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/autoupdate.png?raw=true">  
 
 
 ## Night Mode Conflict Resolution:

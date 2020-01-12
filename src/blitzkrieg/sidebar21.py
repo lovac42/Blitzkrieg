@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-# Copyright 2019 Lovac42
+# Copyright 2019-2020 Lovac42
 # Copyright 2006-2019 Ankitects Pty Ltd and contributors
 # License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 # Support: https://github.com/lovac42/Blitzkrieg
 
 
 import re
-import anki.find
 import aqt
+import anki.find
+import unicodedata
 from aqt import mw
 from anki.lang import ngettext, _
 from aqt.qt import *
@@ -17,7 +18,8 @@ from anki.errors import DeckRenameError, AnkiError
 from anki.hooks import runHook
 
 
-class SidebarTreeWidget(QTreeWidget):
+
+class SidebarTreeView(QTreeView):
     node_state = { # True for open, False for closed
         #Decks are handled per deck settings
         'group': {}, 'tag': {}, 'fav': {}, 'pinDeck': {}, 'pinDyn': {},
@@ -34,22 +36,105 @@ class SidebarTreeWidget(QTreeWidget):
 
 
     def __init__(self):
-        QTreeWidget.__init__(self)
+        super().__init__()
+        self.expanded.connect(self.onExpansion)
+        self.collapsed.connect(self.onCollapse)
+
         self.found = {}
         self.browser = None
         self.timer = None
-        self.dropItem = None
+
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.InternalMove)
-
-        self.itemClicked.connect(self.onTreeClick)
-        self.itemExpanded.connect(self.onTreeCollapse)
-        self.itemCollapsed.connect(self.onTreeCollapse)
+        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.setDropIndicatorShown(True)
 
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.onTreeMenu)
         self.setupContextMenuItems()
+
+
+
+    def keyPressEvent(self, evt):
+        if evt.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self.onClickCurrent()
+        elif evt.key() in (Qt.Key_Down, Qt.Key_Up):
+            super().keyPressEvent(evt)
+            self.onClickCurrent()
+        else:
+            super().keyPressEvent(evt)
+
+
+    def onClickCurrent(self):
+        idx = self.currentIndex()
+        if idx.isValid():
+            item = idx.internalPointer()
+            if item.onClick:
+                #filter out right mouse clicks
+                self.timer=mw.progress.timer(
+                    25, lambda:self._timedItemClick(item, True), False
+                )
+
+    def _timedItemClick(self, item, fromTimer=False):
+        item.onClick()
+        try:
+            type=item.type
+        except AttributeError:
+            return
+
+        if type=='tag':
+            showConf=mw.col.conf.get('Blitzkrieg.showAllTags', True)
+            if (showConf and fromTimer) or \
+            (not showConf and not fromTimer):
+                #show all subtags option
+                el = self.browser.form.searchEdit.lineEdit()
+                el.setText(el.text()+"*")
+                self.browser.onSearchActivated()
+
+        elif type=='deck':
+            #Auto update overview summary deck
+            up = mw.col.conf.get('Blitzkrieg.updateOV', False)
+            if up and item.type in ('deck','dyn','pinDeck','pinDyn') \
+            and mw.state == 'overview':
+                d = mw.col.decks.byName(item.fullname)
+                mw.col.decks.select(d["id"])
+                mw.moveToState("overview")
+
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        self.onClickCurrent()
+
+    def onExpansion(self, idx):
+        self._onExpansionChange(idx, True)
+
+    def onCollapse(self, idx):
+        self._onExpansionChange(idx, False)
+
+    def _onExpansionChange(self, idx, expanded):
+        item = idx.internalPointer()
+        try:
+            self.node_state[item.type][item.fullname] = expanded
+        except TypeError: pass
+
+        if item.expanded != expanded:
+            item.expanded = expanded
+            if item.onExpanded:
+                item.onExpanded(expanded)
+                for c in item.children:
+                    if c.onExpanded:
+                        c.onExpanded(c.expanded)
+
+        #highlight parent items
+        if not self.marked[item.type].get(item.fullname):
+            if item.expanded and item.type in ('tag','deck','model') \
+            and len(item.children) and '::' not in item.fullname:
+                item.background = QBrush(QColor(0,0,10,10))
+            else:
+                item.background = None
+
+
 
 
     def setupContextMenuItems(self):
@@ -66,7 +151,7 @@ class SidebarTreeWidget(QTreeWidget):
                 (1,"Export","Export",self._onTreeDeckExport),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
-                (1,"Unpin",None,self._onTreePinDelete),
+                (1,"Unpin*",None,self._onTreePinDelete),
             ),
             "pinDeck":(
                 (1,"Add Notes",None,self._onTreeDeckAddCard),
@@ -74,25 +159,25 @@ class SidebarTreeWidget(QTreeWidget):
                 (1,"Export","Export",self._onTreeDeckExport),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
-                (1,"Unpin",None,self._onTreePinDelete),
+                (1,"Unpin*",None,self._onTreePinDelete),
             ),
             "pinTag":(
-                (1,"Show All",None,self._onTreeTagSelectAll),
-                (1,"Add Notes",None,self._onTreeTagAddCard),
+                (1,"Show All/one",None,self._timedItemClick),
+                (1,"Add Notes*",None,self._onTreeTagAddCard),
                 (1,"Tag Selected","Tag",self._onTreeTag),
                 (1,"Untag Selected","Untag",self._onTreeUnTag),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
-                (1,"Unpin",None,self._onTreePinDelete),
+                (1,"Unpin*",None,self._onTreePinDelete),
             ),
             "tag":(
-                (0,"Show All",None,self._onTreeTagSelectAll),
-                (0,"Add Notes",None,self._onTreeTagAddCard),
+                (0,"Show All/one",None,self._timedItemClick),
+                (0,"Add Notes*",None,self._onTreeTagAddCard),
                 (0,"Rename Leaf","Rename",self._onTreeTagRenameLeaf),
                 (0,"Rename Branch","Rename",self._onTreeTagRenameBranch),
                 (0,"Tag Selected","Tag",self._onTreeTag),
                 (0,"Untag Selected","Untag",self._onTreeUnTag),
-                (0,"Delete","Delete",self._onTreeTagDelete),
+                (0,"Delete*","Delete",self._onTreeTagDelete),
                 (-1,),
                 (0,"Convert to decks","Convert",self._onTreeTag2Deck),
             ),
@@ -119,7 +204,7 @@ class SidebarTreeWidget(QTreeWidget):
             "fav":(
                 (1,"Rename","Rename",self._onTreeFavRename),
                 (1,"Modify","Modify",self._onTreeFavModify),
-                (1,"Delete","Delete",self._onTreeFavDelete),
+                (1,"Delete*","Delete",self._onTreeFavDelete),
             ),
             "model":(
                 (0,"Rename Leaf","Rename",self._onTreeModelRenameLeaf),
@@ -132,111 +217,117 @@ class SidebarTreeWidget(QTreeWidget):
         }
 
 
-    def keyPressEvent(self, evt):
-        if evt.key() in (Qt.Key_Return, Qt.Key_Enter):
-            item = self.currentItem()
-            self.onTreeClick(item, 0)
-        elif evt.key() in (Qt.Key_Down, Qt.Key_Up):
-            super().keyPressEvent(evt)
-            item = self.currentItem()
-            self.onTreeClick(item, 0)
-        else:
-            super().keyPressEvent(evt)
 
-    def onTreeClick(self, item, col):
-        #In Qt5, right click does not trigger this method.
-        if getattr(item, 'onclick', None):
-            if item.type=='tag' and \
-            mw.col.conf.get('Blitzkrieg.showAllTags', False):
-                self._onTreeTagSelectAll(item)
-            else:
-                item.onclick()
-            self.timer=mw.progress.timer(
-                20, lambda:self._changeDecks(item), False)
-
-    def onTreeCollapse(self, item):
-        """Decks do not call this method"""
-        if getattr(item, 'oncollapse', None):
-            item.oncollapse() #decks only
-            return
-        if not isinstance(item.type, str):
-            return
-        exp = item.isExpanded()
-        self.node_state[item.type][item.fullname] = exp
-        #highlight parent decks
-        if item.type == 'tag' and item.childCount() \
-        and not self.marked['tag'].get(item.fullname) \
-        and '::' not in item.fullname:
-            color = QColor(0,0,10,10) if exp else Qt.transparent
-            item.setBackground(0, QBrush(color))
-
-    def dropMimeData(self, parent, row, data, action):
-        # Dealing with qt serialized data is a headache,
-        # so I'm just going to save a reference to the dropped item.
-        # data.data('application/x-qabstractitemmodeldatalist')
-        if parent and isinstance(parent.type, str):
-            #clear item to allow dropping to groups
-            self.dropItem = parent if parent.type!='group' else None
-        return True
 
 
     def dropEvent(self, event):
-        dragItem = event.source().currentItem()
-        if not isinstance(dragItem.type, str):
+        super().dropEvent(event)
+
+        index = self.indexAt(event.pos())
+        if not index.isValid():
             return
-        dgType = dragItem.type
-        if dgType not in self.node_state:
-            event.setDropAction(Qt.IgnoreAction)
-            event.accept()
-            return
-        QAbstractItemView.dropEvent(self, event)
+        dropItem = index.internalPointer()
+
+        try: #quick patch for addon compatibility
+            dropItem.type
+        except AttributeError:
+            dropItem.type=None
+
+        if dropItem and isinstance(dropItem.type, str):
+            if dropItem.type=='group':
+                #clear item to allow dropping to groups
+                dropItem = None
+        else:
+            return #not drop-able
+
+        dragItems = []
+        selections = event.source().selectedIndexes()
+        for sel in selections:
+            item = sel.internalPointer()
+            if not isinstance(item.type, str):
+                continue
+            if item.type not in self.node_state:
+                continue
+            dragItems.append(sel.internalPointer())
+
         self.mw.progress.timer(10,
-            lambda:self.dropEventHandler(dragItem),
+            lambda:self.dropEventHandler(dropItem, dragItems),
             False
         )
 
-    def dropEventHandler(self, dragItem):
-        self.mw.progress.start(label=_("Processing..."))
-        # TODO: add prog update to each move OP
-        dgType = dragItem.type
+    def dropEventHandler(self, dropItem, dragItems):
+        refreshMW=False
         try:
-            if not self.dropItem or \
-            self.dropItem.type == dgType or \
-            self.dropItem.type == dgType[:3]: #pin
-                mw.checkpoint("Dragged "+dgType)
-                dragName,dropName = self._getItemNames(dragItem)
-                parse = mw.col.decks #used for parsing '::' separators
-                cb = None
-                if dgType in ("deck", "dyn"):
-                    self._deckDropEvent(dgType,dragName,dropName)
-                elif dgType == "tag":
-                    cb = self.moveTag
-                elif dgType == "model":
-                    cb = self.moveModel
-                elif dgType[:3] in ("fav","pin"):
-                    cb = self.moveFav
-                if cb:
-                    self._strDropEvent(dragName,dropName,cb)
-                    self.node_state[dgType][dropName] = True
+            type = dropItem.type
+        except AttributeError:
+            type = "item(s)"
+        mw.checkpoint("Dragged "+type)
+        self.browser._lastSearchTxt=""
+        self.mw.progress.start(label=_("Processing...")) #doesn't always show up
+        try:
+            for item in dragItems:
+                dgType = item.type
+                if dgType=='model': #never shows
+                    self.mw.progress._showWin()
+                mw.progress.update(label=item.name)
+
+                if not dropItem or \
+                dropItem.type == dgType or \
+                dropItem.type == dgType[:3]: #pin
+                    dragName,dropName = self._getItemNames(dropItem,item)
+                    parse = mw.col.decks #used for parsing '::' separators
+                    cb = None
+                    if dgType in ("deck", "dyn"):
+                        refreshMW=True
+                        self._deckDropEvent(dgType,dragName,dropName)
+                    elif dgType == "tag":
+                        cb = self.moveTag
+                    elif dgType == "model":
+                        cb = self.moveModel
+                    elif dgType[:3] in ("fav","pin"):
+                        cb = self.moveFav
+                    if cb:
+                        self._strDropEvent(item,dropItem,dragName,dropName,cb)
+                        self.node_state[dgType][dropName] = True
         finally:
             self.mw.progress.finish()
             mw.col.setMod()
-            self.browser.buildTree()
+            self.browser.maybeRefreshSidebar()
+            if refreshMW:
+                mw.reset()
 
+    def _getItemNames(self, dropItem, dragItem):
+        try: #type fav or pin
+            dragName = dragItem.favname
+            try:
+                dropName = dropItem.favname
+            except AttributeError:
+                dropName = None #no parent
+        except AttributeError:
+            dragName = dragItem.fullname
+            try:
+                dropName = dropItem.fullname
+            except AttributeError:
+                dropName = None #no parent
+        if not dropName and dragItem.type[:3] == "pin":
+            dropName="Pinned"
+        return dragName,dropName
 
-    def _strDropEvent(self, dragName, dropName, callback):
+    def _strDropEvent(self, dragItem, dropItem, dragName, dropName, callback):
         parse=mw.col.decks #used for parsing '::' separators
         if dragName and not dropName:
             if len(parse._path(dragName)) > 1:
-                callback(dragName, parse._basename(dragName))
+                callback(dragName, parse._basename(dragName), dragItem, dropItem)
         elif parse._canDragAndDrop(dragName, dropName):
             assert dropName.strip()
-            callback(dragName, dropName + "::" + parse._basename(dragName))
+            callback(dragName, dropName + "::" + parse._basename(dragName), dragItem, dropItem)
 
     def _deckDropEvent(self, dgType, dragName, dropName):
-        #TODO: sub-decks are not rehighlighted when dragging from parent deck.
         parse = mw.col.decks #used for parsing '::' separators
         dragDeck = parse.byName(dragName)
+        if not dragDeck: #parent was moved first
+            return
+
         dragDid = dragDeck["id"]
         dropDid = None
         try:
@@ -260,9 +351,9 @@ class SidebarTreeWidget(QTreeWidget):
         # Adding HL here gets really annoying
         # self.highlight(dgType,dragDeck['name'])
 
-    def moveFav(self, dragName, newName=""):
+    def moveFav(self, dragName, newName="", dragItem=None, dropItem=None):
         try:
-            type = self.dropItem.type
+            type = dropItem.type or "fav"
         except AttributeError:
             type = "fav"
         saved = mw.col.conf['savedFilters']
@@ -281,26 +372,25 @@ class SidebarTreeWidget(QTreeWidget):
                 self._swapHighlight(type,dragName,newName)
 
 
-    def moveModel(self, dragName, newName=""):
+    def moveModel(self, dragName, newName="", dragItem=None, dropItem=None):
         "Rename or Delete models"
         self.browser.editor.saveNow(self.hideEditor)
         self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
-        for m in mw.col.models.all():
-            modelName=m['name']
-            if modelName.startswith(dragName + "::"):
-                m['name'] = modelName.replace(dragName+"::", newName+"::", 1)
-                mw.col.models.save(m)
-            elif modelName == dragName:
-                m['name'] = newName
-                mw.col.models.save(m)
-            self.node_state['model'][newName] = True
-            self._swapHighlight('model',dragName,newName)
+        model = mw.col.models.get(dragItem.mid)
+        modelName=model['name']
+        if modelName.startswith(dragName + "::"):
+            model['name'] = modelName.replace(dragName+"::", newName+"::", 1)
+        elif modelName == dragName:
+            model['name'] = newName
+        self.node_state['model'][newName] = True
+        self._swapHighlight('model',dragName,newName)
+        mw.col.models.save(model)
         mw.col.models.flush()
         self.browser.model.reset()
         self.browser.setupHooks()
 
 
-    def moveTag(self, dragName, newName="", rename=True):
+    def moveTag(self, dragName, newName="", rename=True, dragItem=None, dropItem=None):
         "Rename or Delete tag"
         self.browser.editor.saveNow(self.hideEditor)
         self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
@@ -336,13 +426,27 @@ class SidebarTreeWidget(QTreeWidget):
 
 
     def onTreeMenu(self, pos):
-        try: #isRightClick, stop timer
+        try:
+            #stop timer for, auto update overview summary deck, during right clicks
             self.timer.stop()
         except: pass
 
-        item=self.currentItem()
+
+        # dropItem = self.indexAt(event.pos()).internalPointer()
+        # selections = event.source().selectedIndexes()
+        # items=self.selectedIndexes()
+
+        index=self.indexAt(pos)
+        if not index.isValid():
+            return
+        item=index.internalPointer()
         if not item:
             return
+
+        try: #quick patch for addon compatibility
+            item.type
+        except AttributeError:
+            item.type=None
 
         m = QMenu(self)
         if not isinstance(item.type, str) or item.type == "sys":
@@ -352,11 +456,11 @@ class SidebarTreeWidget(QTreeWidget):
 
         elif mw.app.keyboardModifiers()==Qt.ShiftModifier:
             if item.type != "group":
-                act = m.addAction("Mark/Unmark Item (tmp)")
-                act.triggered.connect(lambda:self._onTreeMark(item))
+                act = m.addAction("Mark/Unmark Item*")
+                act.triggered.connect(lambda:self._onTreeMark(index))
                 if item.type in ("deck","tag"):
-                    act = m.addAction("Pin Item")
-                    act.triggered.connect(lambda:self._onTreePin(item))
+                    act = m.addAction("Pin Item*")
+                    act.triggered.connect(lambda:self._onTreePin(index))
                 if item.type in ("pin","fav"):
                     ico = mw.col.conf.get('Blitzkrieg.icon_fav', True)
                     act = m.addAction("Show icon for paths")
@@ -386,18 +490,18 @@ class SidebarTreeWidget(QTreeWidget):
                     act.setChecked(up)
                     act.triggered.connect(self._toggleMWUpdate)
                 elif item.fullname == "tag":
-                    sa = mw.col.conf.get('Blitzkrieg.showAllTags', False)
+                    sa = mw.col.conf.get('Blitzkrieg.showAllTags', True)
                     act = m.addAction("Auto Show Subtags")
                     act.setCheckable(True)
                     act.setChecked(sa)
                     act.triggered.connect(self._toggleShowSubtags)
 
-            if item.childCount():
+            if len(item.children):
                 m.addSeparator()
-                act = m.addAction("Collapse All")
-                act.triggered.connect(lambda:self._expandAllChildren(item))
-                act = m.addAction("Expand All")
-                act.triggered.connect(lambda:self._expandAllChildren(item,True))
+                act = m.addAction("Collapse All*")
+                act.triggered.connect(lambda:self.expandAllChildren(index))
+                act = m.addAction("Expand All*")
+                act.triggered.connect(lambda:self.expandAllChildren(index,True))
 
         elif item.type == "group":
             if item.fullname == "tag":
@@ -416,11 +520,11 @@ class SidebarTreeWidget(QTreeWidget):
 
             m.addSeparator()
             act = m.addAction("Find...")
-            act.triggered.connect(lambda:self.findRecursive(item))
-            act = m.addAction("Collapse All")
-            act.triggered.connect(lambda:self._expandAllChildren(item))
-            act = m.addAction("Expand All")
-            act.triggered.connect(lambda:self._expandAllChildren(item,True))
+            act.triggered.connect(lambda:self.findRecursive(index))
+            act = m.addAction("Collapse All*")
+            act.triggered.connect(lambda:self.expandAllChildren(index))
+            act = m.addAction("Expand All*")
+            act.triggered.connect(lambda:self.expandAllChildren(index,True))
 
         else:
             for itm in self.MENU_ITEMS[item.type]:
@@ -437,6 +541,7 @@ class SidebarTreeWidget(QTreeWidget):
         m.popup(QCursor.pos())
 
 
+
     def _onTreeItemAction(self, item, action, callback):
         self.browser.editor.saveNow(self.hideEditor)
         if action:
@@ -448,7 +553,7 @@ class SidebarTreeWidget(QTreeWidget):
             mw.col.setMod()
             self.browser.setupHooks()
             self.browser.onReset()
-            self.browser.buildTree()
+            self.browser.maybeRefreshSidebar()
 
 
     def _onTreeDeckEmpty(self, item):
@@ -485,10 +590,10 @@ class SidebarTreeWidget(QTreeWidget):
         mw.reset(True)
 
     def _onTreeDeckAdd(self, item=None):
-        default=item.fullname+"::" if item and item.type=='deck' else ''
-        deck = getOnlyText(_("Name for deck:"),default=default)
-        if deck:
-            mw.col.decks.id(deck)
+        parent=item.fullname+"::" if item and item.type=='deck' else ''
+        subdeck = getOnlyText(_("Name for deck/subdeck:"))
+        if subdeck:
+            mw.col.decks.id(parent+subdeck)
             mw.col.decks.save()
             mw.col.decks.flush()
             mw.reset(True)
@@ -517,6 +622,7 @@ class SidebarTreeWidget(QTreeWidget):
         if not newName or newName == item.fullname:
             return
 
+        newName = unicodedata.normalize("NFC", newName)
         deck = mw.col.decks.get(sel["id"])
         try:
             mw.col.decks.rename(deck, newName)
@@ -525,7 +631,7 @@ class SidebarTreeWidget(QTreeWidget):
         self._swapHighlight(item.type,item.fullname,newName)
         mw.col.decks.save()
         mw.col.decks.flush()
-        self.highlight('deck',newName)
+        # self.highlight('deck',newName)
         mw.show()
         mw.reset(True)
 
@@ -534,10 +640,14 @@ class SidebarTreeWidget(QTreeWidget):
         sel=mw.col.decks.byName(item.fullname)
         mw.deckBrowser._rename(sel['id'])
         if item.fullname != sel['name']:
+            # TODO: current version of anki api does not normalize on renames.
+            # Remove this line once it does.
+            sel['name'] = unicodedata.normalize("NFC", sel['name'])
+
             self._swapHighlight(item.type,item.fullname,sel['name'])
             mw.col.decks.save()
             mw.col.decks.flush()
-            self.highlight('deck',sel['name'])
+            # self.highlight('deck',sel['name'])
             mw.reset(True)
 
     def _onTreeDeckAddCard(self, item):
@@ -548,36 +658,61 @@ class SidebarTreeWidget(QTreeWidget):
 
     def _onTreeTagAddCard(self, item):
         from aqt import addcards
+        tags=[]
+        items=self.selectedIndexes()
+        for i in items:
+            itm=i.internalPointer()
+            tags.append(itm.fullname)
         diag = aqt.dialogs.open("AddCards", self.mw)
-        diag.editor.tags.setText(item.fullname)
-
-    def _onTreeTagSelectAll(self, item):
-        item.onclick()
-        el = self.browser.form.searchEdit.lineEdit()
-        el.setText(el.text()+"*")
-        self.browser.onSearchActivated()
+        diag.editor.tags.setText(" ".join(tags))
 
     def _onTreeTagRenameLeaf(self, item):
         oldNameArr = item.fullname.split("::")
         newName = getOnlyText(_("New tag name:"),default=oldNameArr[-1])
+        newName = unicodedata.normalize("NFC", newName)
         newName = newName.replace('"', "")
         if not newName or newName == oldNameArr[-1]:
             return
         oldNameArr[-1] = newName
         newName = "::".join(oldNameArr)
         self.moveTag(item.fullname,newName)
-        self.highlight('tag',newName)
+        # self.highlight('tag',newName)
 
     def _onTreeTagRenameBranch(self, item):
         newName = getOnlyText(_("New tag name:"),default=item.fullname)
+        newName = unicodedata.normalize("NFC", newName)
         newName = newName.replace('"', "")
         if not newName or newName == item.fullname:
             return
         self.moveTag(item.fullname,newName)
-        self.highlight('tag',newName)
+        # self.highlight('tag',newName)
 
     def _onTreeTagDelete(self, item):
-        self.moveTag(item.fullname,rename=False)
+        "allows del of multi selected tags"
+        self.browser.editor.saveNow(self.hideEditor)
+        # self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
+        items=self.selectedIndexes()
+        for i in items:
+            itm=i.internalPointer()
+            self._massDelTag(itm.fullname)
+        mw.col.tags.save()
+        mw.col.tags.flush()
+        mw.col.tags.registerNotes()
+        # self.browser.setupHooks()
+
+    def _massDelTag(self, dragName):
+        f = anki.find.Finder(mw.col)
+        # rename children
+        for tag in mw.col.tags.all():
+            if tag.startswith(dragName + "::"):
+                ids = f.findNotes('"tag:%s"'%tag)
+                self._swapHighlight('tag',tag,"",False)
+                mw.col.tags.bulkRem(ids,tag)
+        # rename parent
+        ids = f.findNotes('"tag:%s"'%dragName)
+        mw.col.tags.bulkRem(ids,dragName)
+        self._swapHighlight('tag',dragName,"",False)
+
 
 
     def _onTreeTag(self, item, add=True):
@@ -593,6 +728,7 @@ class SidebarTreeWidget(QTreeWidget):
 
     def _onTreeUnTag(self, item):
         self._onTreeTag(item,False)
+        self.refresh()
 
     def _onTreeDeck2Tag(self, item):
         msg = _("Convert all notes in deck/subdecks to tags?")
@@ -618,6 +754,7 @@ class SidebarTreeWidget(QTreeWidget):
                     found = True
                     tagName = re.sub(r"\s*(::)\s*","\g<1>",name)
                     tagName = re.sub(r"\s+","_",tagName)
+                    tagName = unicodedata.normalize("NFC", tagName)
                     mw.col.tags.bulkAdd(nids, tagName)
                 #skip parent or dyn decks
                 if did == parentDid or mw.col.decks.get(did)['dyn']:
@@ -638,7 +775,7 @@ class SidebarTreeWidget(QTreeWidget):
             mw.col.decks.flush()
             mw.col.tags.save()
             mw.col.tags.flush()
-            self.highlight('tag',item.fullname)
+            # self.highlight('tag',item.fullname)
             mw.col.tags.registerNotes()
             mw.requireReset()
 
@@ -667,7 +804,7 @@ class SidebarTreeWidget(QTreeWidget):
         try:
             f = anki.find.Finder(mw.col)
             self.browser._lastSearchTxt=""
-            parent = item.fullname
+            parent = unicodedata.normalize("NFC", item.fullname)
             tag2Deck(parent)
             for tag in mw.col.tags.all():
                 mw.progress.update(label=tag)
@@ -679,21 +816,23 @@ class SidebarTreeWidget(QTreeWidget):
             mw.col.decks.flush()
             mw.col.tags.save()
             mw.col.tags.flush()
-            self.highlight('deck',item.fullname)
+            # self.highlight('deck',item.fullname)
             mw.col.tags.registerNotes()
             mw.requireReset()
 
 
     def _onTreePinDelete(self, item):
-        act=mw.col.conf['savedFilters'].get(item.favname)
-        if not act: return
-        del mw.col.conf['savedFilters'][item.favname]
+        for idx in self.selectedIndexes():
+            itm = idx.internalPointer()
+            if mw.col.conf['savedFilters'].get(itm.favname):
+                del mw.col.conf['savedFilters'][itm.favname]
 
     def _onTreeFavDelete(self, item):
-        act=mw.col.conf['savedFilters'].get(item.favname)
-        if not act: return
-        if askUser(_("Remove %s from your saved searches?") % item.favname):
-            del mw.col.conf['savedFilters'][item.favname]
+        for idx in self.selectedIndexes():
+            itm = idx.internalPointer()
+            if mw.col.conf['savedFilters'].get(itm.favname) and \
+            askUser(_("Remove %s from your saved searches?") % itm.favname):
+                del mw.col.conf['savedFilters'][itm.favname]
 
     def _onTreeFavRename(self, item):
         act=mw.col.conf['savedFilters'].get(item.favname)
@@ -724,24 +863,24 @@ class SidebarTreeWidget(QTreeWidget):
         newName = newName.replace('"', "")
         if not newName or newName == oldNameArr[-1]:
             return
-        oldNameArr[-1] = newName
+        oldNameArr[-1] = unicodedata.normalize("NFC", newName)
         newName = "::".join(oldNameArr)
-        self.moveModel(item.fullname,newName)
-        self.highlight('model',newName)
+        self.moveModel(item.fullname,newName,item)
+        # self.highlight('model',newName)
 
     def _onTreeModelRenameBranch(self, item):
         self.browser._lastSearchTxt=""
-        model = mw.col.models.byName(item.fullname)
         newName = getOnlyText(_("New model name:"),default=item.fullname)
         newName = newName.replace('"', "")
         if not newName or newName == item.fullname:
             return
-        self.moveModel(item.fullname,newName)
-        self.highlight('model',newName)
+        newName = unicodedata.normalize("NFC", newName)
+        self.moveModel(item.fullname,newName,item)
+        # self.highlight('model',newName)
 
     def _onTreeModelDelete(self, item):
         self.browser._lastSearchTxt=""
-        model = mw.col.models.byName(item.fullname)
+        model = mw.col.models.get(item.mid)
         if not model:
             return
         if mw.col.models.useCount(model):
@@ -754,7 +893,6 @@ class SidebarTreeWidget(QTreeWidget):
             except AnkiError:
                 #user says no to full sync requirement
                 return
-
         mw.col.models.save()
         mw.col.models.flush()
         self.browser.setupTable()
@@ -774,7 +912,7 @@ class SidebarTreeWidget(QTreeWidget):
 
     def onTreeModelFields(self, item):
         from aqt.fields import FieldDialog
-        model = mw.col.models.byName(item.fullname)
+        model = mw.col.models.get(item.mid)
         mw.col.models.setCurrent(model)
         n = mw.col.newNote(forDeck=False)
         for name in list(n.keys()):
@@ -789,7 +927,7 @@ class SidebarTreeWidget(QTreeWidget):
 
     def onTreeModelOptions(self, item):
         from aqt.forms import modelopts
-        model = mw.col.models.byName(item.fullname)
+        model = mw.col.models.get(item.mid)
         d = QDialog(self)
         frm = modelopts.Ui_Dialog()
         frm.setupUi(d)
@@ -809,23 +947,33 @@ class SidebarTreeWidget(QTreeWidget):
         aqt.models.Models(self.mw, self.browser)
         mw.col.setMod()
         self.browser.onReset()
-        self.browser.buildTree()
+        self.browser.maybeRefreshSidebar()
 
-    def _onTreeMark(self, item):
-        tf=not self.marked[item.type].get(item.fullname, False)
-        self.marked[item.type][item.fullname]=tf
-        color=Qt.yellow if tf else Qt.transparent
-        item.setBackground(0, QBrush(color))
-        item.setSelected(False)
+    def _onTreeMark(self, index):
+        indexes=self.selectedIndexes()
+        if index not in indexes:
+            indexes.append(index)
+        for idx in indexes:
+            item = idx.internalPointer()
+            tf=not self.marked[item.type].get(item.fullname, False)
+            self.marked[item.type][item.fullname]=tf
+            color=QBrush(Qt.yellow) if tf else None
+            item.background=color
+        self.clearSelection()
 
-    def _onTreePin(self, item):
-        name = "Pinned::%s"%(
-            item.fullname.split("::")[-1])
-        search = '"%s:%s"'%(item.type,item.fullname)
-        if "savedFilters" not in mw.col.conf:
-            mw.col.conf['savedFilters'] = {}
-        mw.col.conf['savedFilters'][name] = search
-        self.browser.buildTree()
+    def _onTreePin(self, index):
+        indexes=self.selectedIndexes()
+        if index not in indexes:
+            indexes.append(index)
+        for idx in indexes:
+            item = idx.internalPointer()
+            name = "Pinned::%s"%(
+                item.fullname.split("::")[-1])
+            search = '"%s:%s"'%(item.type,item.fullname)
+            if "savedFilters" not in mw.col.conf:
+                mw.col.conf['savedFilters'] = {}
+            mw.col.conf['savedFilters'][name] = search
+        self.browser.maybeRefreshSidebar()
 
     def onEmptyAll(self):
         for d in mw.col.decks.all():
@@ -848,59 +996,49 @@ class SidebarTreeWidget(QTreeWidget):
             return mw.col.conf['savedFilters'].get(item.favname)
         return False
 
-    def _getItemNames(self, dragItem):
-        try: #type fav or pin
-            dragName = dragItem.favname
-            try:
-                dropName = self.dropItem.favname
-            except AttributeError:
-                dropName = None #no parent
-        except AttributeError:
-            dragName = dragItem.fullname
-            try:
-                dropName = self.dropItem.fullname
-            except AttributeError:
-                dropName = None #no parent
-        if not dropName and dragItem.type[:3] == "pin":
-            dropName="Pinned"
-        return dragName,dropName
-
     def _toggleMWUpdate(self):
         up = mw.col.conf.get('Blitzkrieg.updateOV', False)
         mw.col.conf['Blitzkrieg.updateOV'] = not up
 
     def _toggleShowSubtags(self):
-        sa = mw.col.conf.get('Blitzkrieg.showAllTags', False)
+        sa = mw.col.conf.get('Blitzkrieg.showAllTags', True)
         mw.col.conf['Blitzkrieg.showAllTags'] = not sa
 
     def _toggleSortOption(self, item):
         sort = not mw.col.conf.get('Blitzkrieg.sort_'+item.fullname,False)
         mw.col.conf['Blitzkrieg.sort_'+item.fullname] = sort
-        self.browser.buildTree()
+        self.browser.maybeRefreshSidebar()
 
     def _toggleIconOption(self, item):
         TYPE='fav' if item.type in ("pin","fav") else item.fullname
         ico = not mw.col.conf.get('Blitzkrieg.icon_'+TYPE,True)
         mw.col.conf['Blitzkrieg.icon_'+TYPE] = ico
-        self.browser.buildTree()
+        self.browser.maybeRefreshSidebar()
 
-    def _changeDecks(self, item):
-        up = mw.col.conf.get('Blitzkrieg.updateOV', False)
-        if up and item.type in ('deck','dyn','pinDeck','pinDyn') \
-        and mw.state == 'overview':
-            d = mw.col.decks.byName(item.fullname)
-            mw.col.decks.select(d["id"])
-            mw.moveToState("overview")
 
-    def _expandAllChildren(self, item, expanded=False):
-        for i in range(item.childCount()):
-            itm = item.child(i)
-            if itm.childCount():
-                self._expandAllChildren(itm, expanded)
-        item.setExpanded(expanded)
 
-    def findRecursive(self, item):
+
+    def expandAllChildren(self, index, expanded=False):
+        self._expandAllChildren(index, expanded)
+        for idx in self.selectedIndexes():
+            self._expandAllChildren(idx, expanded)
+
+    def _expandAllChildren(self, parentIdx, expanded=False):
+        parentItem=parentIdx.internalPointer()
+        parentItem.expanded=expanded
+        for row, child in enumerate(parentItem.children):
+            childIdx = self.model().index(row, 0, parentIdx)
+            self._expandAllChildren(childIdx, expanded)
+
+        self.setExpanded(parentIdx, expanded)
+        try: #no deck type
+            self.node_state[parentItem.type][parentItem.fullname]=expanded
+        except TypeError: pass
+
+
+    def findRecursive(self, index):
         from .forms import findtreeitems
+        item=index.internalPointer()
         TAG_TYPE = item.fullname
         self.found = {}
         self.found[TAG_TYPE] = {}
@@ -927,6 +1065,7 @@ class SidebarTreeWidget(QTreeWidget):
         txt = frm.input.text()
         if not txt:
             return
+        txt = unicodedata.normalize("NFC", txt)
         options = Qt.MatchRecursive
         if txt=='vote for pedro':
             mw.pm.profile['Blitzkrieg.VFP']=True
@@ -953,44 +1092,32 @@ class SidebarTreeWidget(QTreeWidget):
             options |= Qt.MatchContains
             self.finder['radio'] = 0
 
-        self._expandAllChildren(item,True)
-        self.browser.buildTree()
-        for itm in self.findItems(txt,options):
+        self.expandAllChildren(index,True)
+
+        for idx in self.findItems(txt,options):
+            itm = idx.internalPointer()
             if itm.type == TAG_TYPE:
-                itm.setBackground(0, QBrush(Qt.cyan))
+                itm.background=QBrush(Qt.cyan)
                 self.found[TAG_TYPE][itm.fullname] = True
 
         if not self.found[TAG_TYPE]:
             showInfo("Found nothing, nada, zilch!")
 
+    def findItems(self, txt, options):
+        model=self.model()
+        return model.match(
+            self.currentIndex(), Qt.DisplayRole,
+            QVariant(txt), -1, options
+        )
 
     def refresh(self):
         self.found = {}
-        mw.col.tags.registerNotes()
+        mw.col.tags.registerNotes() #calls "newTag" hook which invokes maybeRefreshSidebar
         #Clear to create a smooth UX
         self.marked['group'] = {}
         self.marked['pinDeck'] = {}
         self.marked['pinDyn'] = {}
         self.marked['pinTag'] = {}
-
-
-    def highlight(self, type, name):
-        def unhighlight():
-            del(self.marked[type][name])
-            # This requires double refresh to clear the mark.
-            # TODO: find a way to delete highlight as if it's fading away.
-        if not self.marked[type].get(name, False):
-            self.marked[type][name] = True
-            mw.progress.timer(100,unhighlight,False)
-        if type == 'deck':
-            return
-        #set parent expanded
-        nodes=name.split('::')
-        while len(nodes)>1:
-            nodes.pop()
-            n='::'.join(nodes)
-            self.node_state[type][n] = True
-
 
     def _swapHighlight(self, type, oName, nName, swap=True):
         if swap and self.marked[type].get(oName, False):
@@ -998,6 +1125,7 @@ class SidebarTreeWidget(QTreeWidget):
         try:
             del(self.marked[type][oName])
         except KeyError: pass
+
 
 
 
@@ -1014,6 +1142,8 @@ class TagTreeWidget(QTreeWidget):
         self.itemClicked.connect(self.onClick)
         self.itemExpanded.connect(self.onCollapse)
         self.itemCollapsed.connect(self.onCollapse)
+
+        # self.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
     def onClick(self, item, col):
         item.setSelected(False)
