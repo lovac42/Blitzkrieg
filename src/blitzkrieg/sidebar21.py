@@ -6,8 +6,9 @@
 
 
 import re
-import anki.find
 import aqt
+import anki.find
+import unicodedata
 from aqt import mw
 from anki.lang import ngettext, _
 from aqt.qt import *
@@ -47,7 +48,7 @@ class SidebarTreeView(QTreeView):
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.InternalMove)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.setDropIndicatorShown(True);
+        self.setDropIndicatorShown(True)
 
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.onTreeMenu)
@@ -617,6 +618,7 @@ class SidebarTreeView(QTreeView):
         if not newName or newName == item.fullname:
             return
 
+        newName = unicodedata.normalize("NFC", newName)
         deck = mw.col.decks.get(sel["id"])
         try:
             mw.col.decks.rename(deck, newName)
@@ -634,6 +636,10 @@ class SidebarTreeView(QTreeView):
         sel=mw.col.decks.byName(item.fullname)
         mw.deckBrowser._rename(sel['id'])
         if item.fullname != sel['name']:
+            # TODO: current version of anki api does not normalize on renames.
+            # Remove this line once it does.
+            sel['name'] = unicodedata.normalize("NFC", sel['name'])
+
             self._swapHighlight(item.type,item.fullname,sel['name'])
             mw.col.decks.save()
             mw.col.decks.flush()
@@ -659,6 +665,7 @@ class SidebarTreeView(QTreeView):
     def _onTreeTagRenameLeaf(self, item):
         oldNameArr = item.fullname.split("::")
         newName = getOnlyText(_("New tag name:"),default=oldNameArr[-1])
+        newName = unicodedata.normalize("NFC", newName)
         newName = newName.replace('"', "")
         if not newName or newName == oldNameArr[-1]:
             return
@@ -669,6 +676,7 @@ class SidebarTreeView(QTreeView):
 
     def _onTreeTagRenameBranch(self, item):
         newName = getOnlyText(_("New tag name:"),default=item.fullname)
+        newName = unicodedata.normalize("NFC", newName)
         newName = newName.replace('"', "")
         if not newName or newName == item.fullname:
             return
@@ -742,6 +750,7 @@ class SidebarTreeView(QTreeView):
                     found = True
                     tagName = re.sub(r"\s*(::)\s*","\g<1>",name)
                     tagName = re.sub(r"\s+","_",tagName)
+                    tagName = unicodedata.normalize("NFC", tagName)
                     mw.col.tags.bulkAdd(nids, tagName)
                 #skip parent or dyn decks
                 if did == parentDid or mw.col.decks.get(did)['dyn']:
@@ -791,7 +800,7 @@ class SidebarTreeView(QTreeView):
         try:
             f = anki.find.Finder(mw.col)
             self.browser._lastSearchTxt=""
-            parent = item.fullname
+            parent = unicodedata.normalize("NFC", item.fullname)
             tag2Deck(parent)
             for tag in mw.col.tags.all():
                 mw.progress.update(label=tag)
@@ -850,7 +859,7 @@ class SidebarTreeView(QTreeView):
         newName = newName.replace('"', "")
         if not newName or newName == oldNameArr[-1]:
             return
-        oldNameArr[-1] = newName
+        oldNameArr[-1] = unicodedata.normalize("NFC", newName)
         newName = "::".join(oldNameArr)
         self.moveModel(item.fullname,newName,item)
         # self.highlight('model',newName)
@@ -861,6 +870,7 @@ class SidebarTreeView(QTreeView):
         newName = newName.replace('"', "")
         if not newName or newName == item.fullname:
             return
+        newName = unicodedata.normalize("NFC", newName)
         self.moveModel(item.fullname,newName,item)
         # self.highlight('model',newName)
 
@@ -1051,6 +1061,7 @@ class SidebarTreeView(QTreeView):
         txt = frm.input.text()
         if not txt:
             return
+        txt = unicodedata.normalize("NFC", txt)
         options = Qt.MatchRecursive
         if txt=='vote for pedro':
             mw.pm.profile['Blitzkrieg.VFP']=True
@@ -1187,8 +1198,3 @@ select tags from notes where id in %s""" % ids2str(nids))
                 item.type = "tag"
                 item.setIcon(0, QIcon(":/icons/tag.svg"))
             except AttributeError: pass
-
-
-
-
-
