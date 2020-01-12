@@ -184,7 +184,7 @@ def modelTree(browser, root):
     assert browser.col
     tree=browser.sidebarTree
     ico = ":/icons/notetype.svg"
-    icoOpt = browser.col.conf.get('Blitzkrieg.icon_model',False)
+    icoOpt = browser.col.conf.get('Blitzkrieg.icon_model',True)
     rootNode = SidebarItem(
         _("Models"), ico,
         expanded=tree.node_state.get("group").get('model',False)
