@@ -35,6 +35,9 @@ Batch operations was added in Blitzkrieg II v0.1.0. Only some operatons * are su
 <img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/bulkOp.png?raw=true">  
 
 
+<img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/multiSel.png?raw=true">  
+
+
 ### Others:
 <img src="https://github.com/lovac42/blitzkrieg/blob/master/screenshots/itemSize.png?raw=true">  
 
