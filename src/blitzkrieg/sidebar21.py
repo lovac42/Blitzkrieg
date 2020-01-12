@@ -257,6 +257,11 @@ class SidebarTreeView(QTreeView):
 
     def dropEventHandler(self, dropItem, dragItems):
         refreshMW=False
+        try:
+            type = dropItem.type
+        except AttributeError:
+            type = "item(s)"
+        mw.checkpoint("Dragged "+type)
         self.browser._lastSearchTxt=""
         self.mw.progress.start(label=_("Processing...")) #doesn't always show up
         try:
@@ -269,7 +274,6 @@ class SidebarTreeView(QTreeView):
                 if not dropItem or \
                 dropItem.type == dgType or \
                 dropItem.type == dgType[:3]: #pin
-                    mw.checkpoint("Dragged "+dgType)
                     dragName,dropName = self._getItemNames(dropItem,item)
                     parse = mw.col.decks #used for parsing '::' separators
                     cb = None
@@ -1092,7 +1096,6 @@ class SidebarTreeView(QTreeView):
 
         for idx in self.findItems(txt,options):
             itm = idx.internalPointer()
-            # print(itm.name)
             if itm.type == TAG_TYPE:
                 itm.background=QBrush(Qt.cyan)
                 self.found[TAG_TYPE][itm.fullname] = True
