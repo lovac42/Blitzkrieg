@@ -5,10 +5,10 @@
 # Support: https://github.com/lovac42/Blitzkrieg
 
 
+import aqt  #TODO: RM later, for 2.1.15
 from typing import Callable, List, Dict, Optional
 from aqt.qt import *
 from anki.lang import _
-
 
 
 class SidebarItem:
@@ -43,6 +43,8 @@ class SidebarItem:
 
 
 class SidebarModel(QAbstractItemModel):
+    nightmode = False #TODO: RM later, for 2.1.15
+
     def __init__(self, root: SidebarItem) -> None:
         super().__init__()
         self.root = root
@@ -115,6 +117,13 @@ class SidebarModel(QAbstractItemModel):
         icon = self.iconCache.get(iconRef)
         if icon is None:
             icon = QIcon(iconRef)
+
+            if self.nightmode: #TODO: RM later, for 2.1.15
+                pixmap = icon.pixmap(32, 32)
+                image = pixmap.toImage()
+                image.invertPixels()
+                icon = aqt.QIcon(QPixmap.fromImage(image))
+
             self.iconCache[iconRef] = icon
         return icon
 

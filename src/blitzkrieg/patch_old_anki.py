@@ -9,9 +9,19 @@
 from aqt.qt import *
 from anki.lang import _
 from aqt.browser import Browser #, SidebarItem
+from anki.hooks import addHook
 
 from .patch_sidebar import SidebarItem, SidebarModel
 from .sidebar21 import SidebarTreeView
+
+
+#compatible with new nightmode, for colorizing tags on 2.1.15
+NM_CONFIG = None
+def nightModeChanged(config):
+    global NM_CONFIG
+    NM_CONFIG = config
+addHook("night_mode_config_loaded", nightModeChanged)
+
 
 
 #backwards compatible
@@ -21,6 +31,9 @@ def bc_maybeRefreshSidebar(self):
         def deferredDisplay():
             root = self.buildTree()
             model = SidebarModel(root)
+            try:
+                model.nightmode = NM_CONFIG.state_on.value
+            except: pass
             self.sidebarTree.setModel(model)
             model.expandWhereNeccessary(self.sidebarTree)
         self.mw.progress.timer(10, deferredDisplay, False)
