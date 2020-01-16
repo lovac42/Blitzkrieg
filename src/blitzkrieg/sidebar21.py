@@ -539,7 +539,8 @@ class SidebarTreeView(QTreeView):
                     )
 
         runHook("Blitzkrieg.treeMenu", self, item, m)
-        m.popup(QCursor.pos())
+        if not m.isEmpty():
+            m.popup(QCursor.pos())
 
 
 
