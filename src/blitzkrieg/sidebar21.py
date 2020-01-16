@@ -116,7 +116,10 @@ class SidebarTreeView(QTreeView):
         item = idx.internalPointer()
         try:
             self.node_state[item.type][item.fullname] = expanded
-        except TypeError: pass
+        except TypeError:
+            pass
+        except (AttributeError,KeyError):
+            return # addon: Customize Sidebar, favTree errors
 
         if item.expanded != expanded:
             item.expanded = expanded
@@ -133,8 +136,6 @@ class SidebarTreeView(QTreeView):
                 item.background = QBrush(QColor(0,0,10,10))
             else:
                 item.background = None
-
-
 
 
     def setupContextMenuItems(self):
