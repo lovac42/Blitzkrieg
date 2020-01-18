@@ -54,6 +54,7 @@ class SidebarTreeView(QTreeView):
         self.customContextMenuRequested.connect(self.onTreeMenu)
         self.setupContextMenuItems()
 
+        mw.col.tags.registerNotes() # clearn unused tags to prevent lockup
 
 
     def keyPressEvent(self, evt):
@@ -219,8 +220,6 @@ class SidebarTreeView(QTreeView):
 
 
 
-
-
     def dropEvent(self, event):
         super().dropEvent(event)
 
@@ -241,118 +240,133 @@ class SidebarTreeView(QTreeView):
         else:
             return #not drop-able
 
+        type = None
         dragItems = []
-        selections = event.source().selectedIndexes()
-        for sel in selections:
+        for sel in event.source().selectedIndexes():
             item = sel.internalPointer()
-            if not isinstance(item.type, str):
+            dgType = item.type
+            if not isinstance(dgType, str):
                 continue
-            if item.type not in self.node_state:
+            if dgType not in self.node_state:
                 continue
-            dragItems.append(sel.internalPointer())
+            if not dropItem or \
+            dropItem.type == dgType or \
+            dropItem.type == dgType[:3]: #pin
+                if not type:
+                    if dgType in ("deck", "dyn"):
+                        type = "deck"
+                    elif dgType == "tag":
+                        type = "tag"
+                    elif dgType == "model":
+                        type = "model"
+                    elif dgType[:3] in ("fav","pin"):
+                        type = "fav"
+                    else:
+                        continue
+                elif type!=dgType:
+                    #first item and subsequent items must match the same type
+                    continue
+                dragItems.append(item)
 
+        if not type or not dragItems:
+            return
         self.mw.progress.timer(10,
-            lambda:self.dropEventHandler(dropItem, dragItems),
+            lambda:self.dropEventHandler(type,dragItems,dropItem),
             False
         )
 
-    def dropEventHandler(self, dropItem, dragItems):
-        refreshMW=False
-        try:
-            type = dropItem.type
-        except AttributeError:
-            type = "item(s)"
-        mw.checkpoint("Dragged "+type)
+    def dropEventHandler(self, type, dragItems, dropItem):
+        mw.checkpoint("Dragged %s"%type)
         self.browser._lastSearchTxt=""
         self.mw.progress.start(label=_("Processing...")) #doesn't always show up
+        # prevent child elements being moved if selected
+        dragItems = sorted(dragItems, key=lambda t: t.fullname)
         try:
-            for item in dragItems:
-                dgType = item.type
-                if dgType=='model': #never shows
-                    self.mw.progress._showWin()
-                mw.progress.update(label=item.name)
-
-                if not dropItem or \
-                dropItem.type == dgType or \
-                dropItem.type == dgType[:3]: #pin
-                    dragName,dropName = self._getItemNames(dropItem,item)
-                    parse = mw.col.decks #used for parsing '::' separators
-                    cb = None
-                    if dgType in ("deck", "dyn"):
-                        refreshMW=True
-                        self._deckDropEvent(dgType,dragName,dropName)
-                    elif dgType == "tag":
-                        cb = self.moveTag
-                    elif dgType == "model":
-                        cb = self.moveModel
-                    elif dgType[:3] in ("fav","pin"):
-                        cb = self.moveFav
-                    if cb:
-                        self._strDropEvent(item,dropItem,dragName,dropName,cb)
-                        self.node_state[dgType][dropName] = True
+            if type=="deck":
+                self._deckDropEvent(dragItems, dropItem)
+            elif type=="tag":
+                self._tagDropEvent(dragItems, dropItem)
+            elif type=="model":
+                self._modelDropEvent(dragItems, dropItem)
+            elif type=="fav":
+                self._favDropEvent(dragItems, dropItem)
         finally:
             self.mw.progress.finish()
             mw.col.setMod()
             self.browser.maybeRefreshSidebar()
-            if refreshMW:
+            if type=="deck":
                 mw.reset()
 
-    def _getItemNames(self, dropItem, dragItem):
+
+    def _getItemNames(self, item, dropItem):
         try: #type fav or pin
-            dragName = dragItem.favname
+            itemName = item.favname
             try:
                 dropName = dropItem.favname
             except AttributeError:
                 dropName = None #no parent
         except AttributeError:
-            dragName = dragItem.fullname
+            itemName = item.fullname
             try:
                 dropName = dropItem.fullname
             except AttributeError:
                 dropName = None #no parent
-        if not dropName and dragItem.type[:3] == "pin":
+        if not dropName and item.type[:3] == "pin":
             dropName="Pinned"
-        return dragName,dropName
+        return itemName,dropName
 
-    def _strDropEvent(self, dragItem, dropItem, dragName, dropName, callback):
+
+    def _strDropEvent(self, dragItem, dropItem, type, callback):
         parse=mw.col.decks #used for parsing '::' separators
+        dragName,dropName = self._getItemNames(dragItem, dropItem)
         if dragName and not dropName:
             if len(parse._path(dragName)) > 1:
-                callback(dragName, parse._basename(dragName), dragItem, dropItem)
+                newName = parse._basename(dragName)
+                callback(dragName, newName, dragItem, dropItem)
         elif parse._canDragAndDrop(dragName, dropName):
             assert dropName.strip()
-            callback(dragName, dropName + "::" + parse._basename(dragName), dragItem, dropItem)
+            newName = dropName + "::" + parse._basename(dragName)
+            callback(dragName, newName, dragItem, dropItem)
+        self.node_state[type][dropName] = True
 
-    def _deckDropEvent(self, dgType, dragName, dropName):
+
+    def _deckDropEvent(self, dragItems, dropItem):
         parse = mw.col.decks #used for parsing '::' separators
-        dragDeck = parse.byName(dragName)
-        if not dragDeck: #parent was moved first
-            return
+        for item in dragItems:
+            mw.progress.update(label=item.name)
+            dropDid = None
+            dragName,dropName = self._getItemNames(item, dropItem)
+            dragDeck = parse.byName(dragName)
+            if not dragDeck: #parent was moved first
+                continue
+            try:
+                _,newName = dragName.rsplit('::',1)
+            except ValueError:
+                newName = None
+            if dropName:
+                dropDeck = parse.byName(dropName)
+                dropDid = dropDeck["id"]
+                newName = dropDeck["name"]+"::"+(newName or dragName)
+            try:
+                parse.renameForDragAndDrop(dragDeck["id"], dropDid)
+            except DeckRenameError as e:
+                showWarning(e.description)
+                continue
+            #deck type not used
+            # self.node_state[item.type][dropName] = True
+            mw.col.decks.get(dropDid or 1)['browserCollapsed'] = False
+            if newName:
+                self._swapHighlight(item.type,dragName,newName)
+            #Adding HL here gets really annoying
+            # self.highlight(item.type,dragDeck['name'])
 
-        dragDid = dragDeck["id"]
-        dropDid = None
-        try:
-            _,newName = dragName.rsplit('::',1)
-        except ValueError:
-            newName = None
 
-        if dropName:
-            dropItem = parse.byName(dropName)
-            dropDid = dropItem["id"]
-            newName = dropItem["name"]+"::"+(newName or dragName)
+    def _favDropEvent(self, dragItems, dropItem):
+        for item in dragItems:
+            mw.progress.update(label=item.name)
+            self._strDropEvent(item,dropItem,item.type,self._moveFav)
 
-        try:
-            parse.renameForDragAndDrop(dragDid,dropDid)
-        except DeckRenameError as e:
-            showWarning(e.description)
-        mw.col.decks.get(dropDid)['browserCollapsed'] = False
-
-        if newName:
-            self._swapHighlight(dgType,dragName,newName)
-        # Adding HL here gets really annoying
-        # self.highlight(dgType,dragDeck['name'])
-
-    def moveFav(self, dragName, newName="", dragItem=None, dropItem=None):
+    def _moveFav(self, dragName, newName="", dragItem=None, dropItem=None):
         try:
             type = dropItem.type or "fav"
         except AttributeError:
@@ -373,10 +387,25 @@ class SidebarTreeView(QTreeView):
                 self._swapHighlight(type,dragName,newName)
 
 
-    def moveModel(self, dragName, newName="", dragItem=None, dropItem=None):
+    def _modelDropEvent(self, dragItems, dropItem):
+        if len(dragItems)>1:
+            self.mw.progress._showWin() #never appears if not forced
+        self.browser.editor.saveNow(self.hideEditor)
+        for item in dragItems:
+            mw.progress.update(label=item.name)
+            self._strDropEvent(item,dropItem,item.type,self._moveModel)
+        mw.col.models.flush()
+        self.browser.model.reset()
+
+    def moveModel(self, dragName, newName, dragItem):
         "Rename or Delete models"
         self.browser.editor.saveNow(self.hideEditor)
-        self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
+        self._moveModel(dragName,newName,dragItem)
+        mw.col.models.flush()
+        self.browser.model.reset()
+
+    def _moveModel(self, dragName, newName="", dragItem=None, dropItem=None):
+        "Rename or Delete models"
         model = mw.col.models.get(dragItem.mid)
         modelName=model['name']
         if modelName.startswith(dragName + "::"):
@@ -386,40 +415,44 @@ class SidebarTreeView(QTreeView):
         self.node_state['model'][newName] = True
         self._swapHighlight('model',dragName,newName)
         mw.col.models.save(model)
-        mw.col.models.flush()
-        self.browser.model.reset()
-        self.browser.setupHooks()
 
-
-    def moveTag(self, dragName, newName="", rename=True, dragItem=None, dropItem=None):
-        "Rename or Delete tag"
+    def _tagDropEvent(self, dragItems, dropItem):
         self.browser.editor.saveNow(self.hideEditor)
-        self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
+        mw.col.tags.registerNotes() # clearn unused tags to prevent lockup
+        for item in dragItems:
+            mw.progress.update(label=item.name)
+            self._strDropEvent(item,dropItem,item.type,self._moveTag)
+        mw.col.tags.save()
+        mw.col.tags.flush()
+        mw.col.tags.registerNotes()
+
+    def moveTag(self, dragName, newName):
+        self.browser.editor.saveNow(self.hideEditor)
+        mw.col.tags.registerNotes() # clearn unused tags to prevent lockup
+        self._moveTag(dragName,newName)
+        mw.col.tags.save()
+        mw.col.tags.flush()
+        mw.col.tags.registerNotes()
+
+    def _moveTag(self, dragName, newName, dragItem=None, dropItem=None):
+        "Rename tag"
         f = anki.find.Finder(mw.col)
         # rename children
         for tag in mw.col.tags.all():
             if tag.startswith(dragName + "::"):
                 ids = f.findNotes('"tag:%s"'%tag)
-                if rename:
-                    nn = tag.replace(dragName+"::", newName+"::", 1)
-                    mw.col.tags.bulkAdd(ids,nn)
-                    self.node_state['tag'][nn]=True
-                    self._swapHighlight('tag',tag,nn,rename)
-                else:
-                    self._swapHighlight('tag',tag,newName,rename)
+                nn = tag.replace(dragName+"::", newName+"::", 1)
+                mw.col.tags.bulkAdd(ids,nn)
+                self.node_state['tag'][nn]=True
+                self._swapHighlight('tag',tag,nn)
                 mw.col.tags.bulkRem(ids,tag)
         # rename parent
         ids = f.findNotes('"tag:%s"'%dragName)
-        if rename:
-            mw.col.tags.bulkAdd(ids,newName)
-            self.node_state['tag'][newName]=True
-        self._swapHighlight('tag',dragName,newName,rename)
-
+        mw.col.tags.bulkAdd(ids,newName)
+        self.node_state['tag'][newName] = True
+        self._swapHighlight('tag',dragName,newName)
         mw.col.tags.bulkRem(ids,dragName)
-        mw.col.tags.save()
-        mw.col.tags.flush()
-        mw.col.tags.registerNotes()
-        self.browser.setupHooks()
+
 
     def hideEditor(self):
         self.browser.editor.setNote(None)
@@ -431,11 +464,6 @@ class SidebarTreeView(QTreeView):
             #stop timer for, auto update overview summary deck, during right clicks
             self.timer.stop()
         except: pass
-
-
-        # dropItem = self.indexAt(event.pos()).internalPointer()
-        # selections = event.source().selectedIndexes()
-        # items=self.selectedIndexes()
 
         index=self.indexAt(pos)
         if not index.isValid():
@@ -548,12 +576,10 @@ class SidebarTreeView(QTreeView):
         self.browser.editor.saveNow(self.hideEditor)
         if action:
             mw.checkpoint(action+" "+item.type)
-        self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
         try:
             callback(item)
         finally:
             mw.col.setMod()
-            self.browser.setupHooks()
             self.browser.onReset()
             self.browser.maybeRefreshSidebar()
 
@@ -692,7 +718,6 @@ class SidebarTreeView(QTreeView):
     def _onTreeTagDelete(self, item):
         "allows del of multi selected tags"
         self.browser.editor.saveNow(self.hideEditor)
-        # self.browser.teardownHooks() #RuntimeError: CallbackItem has been deleted
         items=self.selectedIndexes()
         for i in items:
             itm=i.internalPointer()
@@ -700,7 +725,6 @@ class SidebarTreeView(QTreeView):
         mw.col.tags.save()
         mw.col.tags.flush()
         mw.col.tags.registerNotes()
-        # self.browser.setupHooks()
 
     def _massDelTag(self, dragName):
         f = anki.find.Finder(mw.col)
@@ -714,8 +738,6 @@ class SidebarTreeView(QTreeView):
         ids = f.findNotes('"tag:%s"'%dragName)
         mw.col.tags.bulkRem(ids,dragName)
         self._swapHighlight('tag',dragName,"",False)
-
-
 
     def _onTreeTag(self, item, add=True):
         sel = self.browser.selectedNotes()
@@ -1016,8 +1038,6 @@ class SidebarTreeView(QTreeView):
         ico = not mw.col.conf.get('Blitzkrieg.icon_'+TYPE,True)
         mw.col.conf['Blitzkrieg.icon_'+TYPE] = ico
         self.browser.maybeRefreshSidebar()
-
-
 
 
     def expandAllChildren(self, index, expanded=False):
