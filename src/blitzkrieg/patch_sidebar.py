@@ -155,6 +155,9 @@ class SidebarModel(QAbstractItemModel):
         tree.setExpanded(parent, True)
 
 
+    # Drag and drop support
+    ######################################################################
+
     def supportedDropActions(self) -> Qt.DropAction:
         return Qt.MoveAction | Qt.CopyAction
 
