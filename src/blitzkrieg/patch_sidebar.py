@@ -6,35 +6,30 @@
 
 
 import aqt  #TODO: RM later, for 2.1.15
-from typing import Callable, List, Dict, Optional
+# from typing import Callable, List, Dict, Optional
 from aqt.qt import *
 from anki.lang import _
 
 
 class SidebarItem:
-    def __init__(self,
-                 name: str,
-                 icon: str,
-                 onClick: Callable[[], None] = None,
-                 onExpanded: Callable[[bool], None] = None,
-                 expanded: bool = False) -> None:
+    def __init__(self, name, icon, onClick=None, onExpanded=None, expanded=False):
         self.name = name
         self.icon = icon
         self.onClick = onClick
         self.onExpanded = onExpanded
         self.expanded = expanded
-        self.children: List["SidebarItem"] = []
-        self.parentItem: Optional[SidebarItem] = None
+        self.children = [] # List["SidebarItem"]
+        self.parentItem = None # Optional[SidebarItem]
 
         self.tooltip = None
         self.foreground = None
         self.background = None
 
-    def addChild(self, cb: "SidebarItem") -> None:
+    def addChild(self, cb): # cb=SidebarItem
         self.children.append(cb)
         cb.parentItem = self
 
-    def rowForChild(self, child: "SidebarItem") -> Optional[int]:
+    def rowForChild(self, child): # -> Optional[int], child=SidebarItem
         try:
             return self.children.index(child)
         except ValueError:
@@ -45,25 +40,25 @@ class SidebarItem:
 class SidebarModel(QAbstractItemModel):
     nightmode = False #TODO: RM later, for 2.1.15
 
-    def __init__(self, root: SidebarItem) -> None:
+    def __init__(self, root): # root=SidebarItem
         super().__init__()
         self.root = root
-        self.iconCache: Dict[str, QIcon] = {}
+        self.iconCache = {} # Dict[str, QIcon]
 
     # Qt API
     ######################################################################
 
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def rowCount(self, parent=QModelIndex()):
         if not parent.isValid():
             return len(self.root.children)
         else:
             item: SidebarItem = parent.internalPointer()
             return len(item.children)
 
-    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def columnCount(self, parent=QModelIndex()):
         return 1
 
-    def index(self, row: int, column: int, parent: QModelIndex = QModelIndex()) -> QModelIndex:
+    def index(self, row, column, parent=QModelIndex()):
         if not self.hasIndex(row, column, parent):
             return QModelIndex()
 
@@ -76,11 +71,11 @@ class SidebarModel(QAbstractItemModel):
         item = parentItem.children[row]
         return self.createIndex(row, column, item)
 
-    def parent(self, child: QModelIndex) -> QModelIndex: # type: ignore
+    def parent(self, child): # type: ignore
         if not child.isValid():
             return QModelIndex()
 
-        childItem: SidebarItem = child.internalPointer()
+        childItem = child.internalPointer()
         parentItem = childItem.parentItem
 
         if parentItem is None or parentItem == self.root:
@@ -92,7 +87,7 @@ class SidebarModel(QAbstractItemModel):
 
         return self.createIndex(row, 0, parentItem)
 
-    def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> QVariant:
+    def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return QVariant()
 
@@ -113,7 +108,7 @@ class SidebarModel(QAbstractItemModel):
     # Helpers
     ######################################################################
 
-    def iconFromRef(self, iconRef: str) -> QIcon:
+    def iconFromRef(self, iconRef):
         icon = self.iconCache.get(iconRef)
         if icon is None:
             icon = QIcon(iconRef)
@@ -127,13 +122,13 @@ class SidebarModel(QAbstractItemModel):
             self.iconCache[iconRef] = icon
         return icon
 
-    def expandWhereNeccessary(self, tree: QTreeView) -> None:
+    def expandWhereNeccessary(self, tree):
         for row, child in enumerate(self.root.children):
             if child.expanded:
                 idx = self.index(row, 0, QModelIndex())
                 self._expandWhereNeccessary(idx, tree)
 
-    def _expandWhereNeccessary(self, parent: QModelIndex, tree: QTreeView) -> None:
+    def _expandWhereNeccessary(self, parent, tree):
         parentItem: SidebarItem
         if not parent.isValid():
             parentItem = self.root
@@ -158,10 +153,10 @@ class SidebarModel(QAbstractItemModel):
     # Drag and drop support
     ######################################################################
 
-    def supportedDropActions(self) -> Qt.DropAction:
+    def supportedDropActions(self):
         return Qt.MoveAction | Qt.CopyAction
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+    def flags(self, index):
         f = Qt.ItemIsEnabled | Qt.ItemIsSelectable
         if index.isValid():
             f |= Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled
