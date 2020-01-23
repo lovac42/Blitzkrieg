@@ -62,6 +62,13 @@ Browser.SidebarTreeView = SidebarTreeView
 Browser.buildTree = replace_buildTree
 
 
+def onProfileLoaded():
+    if browserInstance:
+        browserInstance.sidebarTree.clear()
+addHook('profileLoaded', onProfileLoaded)
+
+
+
 def onRevertedState(stateName):
     tok=stateName.split()[-1]
     if tok=='deck' or \

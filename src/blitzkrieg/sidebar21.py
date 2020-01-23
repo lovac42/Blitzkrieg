@@ -57,6 +57,20 @@ class SidebarTreeView(QTreeView):
         mw.col.tags.registerNotes() # clearn unused tags to prevent lockup
 
 
+    def clear(self):
+        self.finder.clear()
+        for k in self.node_state:
+            try:
+                self.node_state[k].clear()
+            except AttributeError:
+                pass
+        for k in self.marked:
+            try:
+                self.marked[k].clear()
+            except AttributeError:
+                pass
+
+
     def keyPressEvent(self, evt):
         if evt.key() in (Qt.Key_Return, Qt.Key_Enter):
             self.onClickCurrent()
