@@ -105,7 +105,6 @@ class SidebarTreeView(QTreeView):
                 #show all subtags option
                 el = self.browser.form.searchEdit.lineEdit()
                 el.setText(el.text()+"*")
-                self.browser.onSearchActivated()
 
         elif type=='deck':
             #Auto update overview summary deck
