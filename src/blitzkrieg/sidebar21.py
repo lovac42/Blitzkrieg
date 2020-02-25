@@ -455,16 +455,16 @@ class SidebarTreeView(QTreeView):
             if tag.startswith(dragName + "::"):
                 ids = f.findNotes('"tag:%s"'%tag)
                 nn = tag.replace(dragName+"::", newName+"::", 1)
+                mw.col.tags.bulkRem(ids,tag)
                 mw.col.tags.bulkAdd(ids,nn)
                 self.node_state['tag'][nn]=True
                 self._swapHighlight('tag',tag,nn)
-                mw.col.tags.bulkRem(ids,tag)
         # rename parent
         ids = f.findNotes('"tag:%s"'%dragName)
+        mw.col.tags.bulkRem(ids,dragName)
         mw.col.tags.bulkAdd(ids,newName)
         self.node_state['tag'][newName] = True
         self._swapHighlight('tag',dragName,newName)
-        mw.col.tags.bulkRem(ids,dragName)
 
 
     def hideEditor(self):
