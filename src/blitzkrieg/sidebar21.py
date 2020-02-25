@@ -496,8 +496,15 @@ class SidebarTreeView(QTreeView):
             # So I am using this to readjust item.type
             item.type = "sys"
 
+        #TODO: Rewrite menu for each type + modifier keys
         elif mw.app.keyboardModifiers()==Qt.ShiftModifier:
             if item.type != "group":
+                if item.type == "tag":
+                    act = m.addAction("Create Filtered Tag*")
+                    act.triggered.connect(lambda:self._onTreeCramTags(index))
+                    m.addSeparator()
+                #TODO: add support for custom study from deck list
+
                 act = m.addAction("Mark/Unmark Item*")
                 act.triggered.connect(lambda:self._onTreeMark(index))
                 if item.type in ("deck","tag"):
@@ -985,6 +992,22 @@ class SidebarTreeView(QTreeView):
         mw.col.setMod()
         self.browser.onReset()
         self.browser.maybeRefreshSidebar()
+
+
+    def _onTreeCramTags(self, index):
+        indexes=self.selectedIndexes()
+        if index not in indexes:
+            indexes.append(index)
+        tags=[]
+        for idx in indexes:
+            item = idx.internalPointer()
+            if mw.col.conf.get('Blitzkrieg.showAllTags', True):
+                tags.append('''tag:"%s*"'''%item.fullname)
+            else:
+                tags.append('''tag:"%s"'''%item.fullname)
+        self.clearSelection()
+        mw.onCram("("+" or ".join(tags)+")")
+
 
     def _onTreeMark(self, index):
         indexes=self.selectedIndexes()
