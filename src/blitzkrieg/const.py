@@ -4,11 +4,9 @@
 # Support: https://github.com/lovac42/Blitzkrieg
 
 
-# Do not give what is holy to dogs,
-# and do not throw your pearls before swine,
-# or they will trample them under their feet,
-# and turn and tear you to pieces.
-#                             -- Matthew 7:6
+import anki
 
-VOTE_FOR_PEDRO = False
-
+try:
+    POINT_VERSION = anki.utils.pointVersion()
+except AttributeError:
+    POINT_VERSION = int(anki.version.split('.')[-1])

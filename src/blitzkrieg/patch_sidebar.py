@@ -6,9 +6,14 @@
 
 
 import aqt  #TODO: RM later, for 2.1.15
-# from typing import Callable, List, Dict, Optional
 from aqt.qt import *
 from anki.lang import _
+
+from .const import POINT_VERSION
+
+try:
+    from aqt.theme import theme_manager
+except ModuleNotFoundError: pass
 
 
 class SidebarItem:
@@ -95,7 +100,9 @@ class SidebarModel(QAbstractItemModel):
         if role == Qt.DisplayRole:
             return QVariant(item.name)
         elif role == Qt.DecorationRole:
-            return QVariant(self.iconFromRef(item.icon))
+            if POINT_VERSION < 20:
+                return QVariant(self.iconFromRef(item.icon))
+            return QVariant(theme_manager.icon_from_resources(item.icon))
         elif role == Qt.BackgroundRole:
             return QVariant(item.background)
         elif role == Qt.ForegroundRole:
@@ -108,6 +115,7 @@ class SidebarModel(QAbstractItemModel):
     # Helpers
     ######################################################################
 
+    #DEPRECATION WARNING: This method has been deprecated in anki 2.1.20
     def iconFromRef(self, iconRef):
         icon = self.iconCache.get(iconRef)
         if icon is None:
