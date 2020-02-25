@@ -22,6 +22,7 @@ try: #was fixed on 2.1.17beta3
     from aqt.browser import SidebarItem, SidebarModel
     from .patch_sidebar import SidebarItem as SBI, SidebarModel as SBM
     SidebarItem.__init__=SBI.__init__
+    SidebarModel.__init__=SBM.__init__
     SidebarModel.data=SBM.data
     SidebarModel.flags=SBM.flags
     SidebarModel.supportedDropActions=SBM.supportedDropActions

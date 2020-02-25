@@ -11,10 +11,6 @@ from anki.lang import _
 
 from .const import POINT_VERSION
 
-try:
-    from aqt.theme import theme_manager
-except ModuleNotFoundError: pass
-
 
 class SidebarItem:
     def __init__(self, name, icon, onClick=None, onExpanded=None, expanded=False):
@@ -46,9 +42,16 @@ class SidebarModel(QAbstractItemModel):
     nightmode = False #TODO: RM later, for 2.1.15
 
     def __init__(self, root): # root=SidebarItem
-        super().__init__()
+        QAbstractItemModel.__init__(self)
         self.root = root
         self.iconCache = {} # Dict[str, QIcon]
+
+        if POINT_VERSION < 20:
+            self._getIcon = self.iconFromRef
+        else:
+            from aqt.theme import theme_manager
+            self._getIcon = theme_manager.icon_from_resources
+
 
     # Qt API
     ######################################################################
@@ -100,9 +103,7 @@ class SidebarModel(QAbstractItemModel):
         if role == Qt.DisplayRole:
             return QVariant(item.name)
         elif role == Qt.DecorationRole:
-            if POINT_VERSION < 20:
-                return QVariant(self.iconFromRef(item.icon))
-            return QVariant(theme_manager.icon_from_resources(item.icon))
+            return QVariant(self._getIcon(item.icon))
         elif role == Qt.BackgroundRole:
             return QVariant(item.background)
         elif role == Qt.ForegroundRole:
