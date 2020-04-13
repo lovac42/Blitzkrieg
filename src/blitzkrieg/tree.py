@@ -177,7 +177,7 @@ def decksTree(browser, root):
 
     fillGroups(rootNode, grps)
 
-    deck_cnt = len(browser.col.decks.decks)
+    deck_cnt = len(browser.col.decks.all())
     rootNode.tooltip = f"Total: {deck_cnt} decks"
 
 
