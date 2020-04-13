@@ -130,7 +130,8 @@ def userTagTree(browser, root):
                     item.background=QBrush(QColor(0,0,10,10))
                 tags_tree[leaf_tag] = item
 
-    rootNode.tooltip="Total: %d tags"%len(TAGS)
+    tag_cnt = len(TAGS)
+    rootNode.tooltip = f"Total: {tag_cnt} tags"
 
 
 
@@ -173,8 +174,11 @@ def decksTree(browser, root):
                 item.background=QBrush(Qt.yellow)
             newhead = head + g[0]+"::"
             fillGroups(item, g[5], newhead)
+
     fillGroups(rootNode, grps)
-    rootNode.tooltip="Total: %d decks"%browser.col.decks.count()
+
+    deck_cnt = len(browser.col.decks.decks)
+    rootNode.tooltip = f"Total: {deck_cnt} decks"
 
 
 
@@ -224,5 +228,6 @@ def modelTree(browser, root):
                     item.background=QBrush(Qt.yellow)
                 models_tree[leaf_model] = item
 
-    rootNode.tooltip="Total: %d models"%len(MODELS)
+    model_cnt = len(MODELS)
+    rootNode.tooltip = f"Total: {model_cnt} models"
 
