@@ -435,16 +435,14 @@ class SidebarTreeView(QTreeView):
         for item in dragItems:
             mw.progress.update(label=item.name)
             self._strDropEvent(item,dropItem,item.type,self._moveTag)
-        mw.col.tags.save()
-        mw.col.tags.flush()
+        self._saveTags()
         mw.col.tags.registerNotes()
 
     def moveTag(self, dragName, newName):
         self.browser.editor.saveNow(self.hideEditor)
         mw.col.tags.registerNotes() # clearn unused tags to prevent lockup
         self._moveTag(dragName,newName)
-        mw.col.tags.save()
-        mw.col.tags.flush()
+        self._saveTags()
         mw.col.tags.registerNotes()
 
     def _moveTag(self, dragName, newName, dragItem=None, dropItem=None):
@@ -642,16 +640,14 @@ class SidebarTreeView(QTreeView):
         subdeck = getOnlyText(_("Name for deck/subdeck:"))
         if subdeck:
             mw.col.decks.id(parent+subdeck)
-            mw.col.decks.save()
-            mw.col.decks.flush()
+            self._saveDecks()
             mw.reset(True)
 
     def _onTreeDeckDelete(self, item):
         self.browser._lastSearchTxt=""
         sel=mw.col.decks.byName(item.fullname)
         mw.deckBrowser._delete(sel['id'])
-        mw.col.decks.save()
-        mw.col.decks.flush()
+        self._saveDecks()
         mw.reset(True)
 
     def _onTreeDeckRenameLeaf(self, item):
@@ -677,8 +673,7 @@ class SidebarTreeView(QTreeView):
         except DeckRenameError as e:
             return showWarning(e.description)
         self._swapHighlight(item.type,item.fullname,newName)
-        mw.col.decks.save()
-        mw.col.decks.flush()
+        self._saveDecks()
         # self.highlight('deck',newName)
         mw.show()
         mw.reset(True)
@@ -693,8 +688,7 @@ class SidebarTreeView(QTreeView):
             sel['name'] = unicodedata.normalize("NFC", sel['name'])
 
             self._swapHighlight(item.type,item.fullname,sel['name'])
-            mw.col.decks.save()
-            mw.col.decks.flush()
+            self._saveDecks()
             # self.highlight('deck',sel['name'])
             mw.reset(True)
 
@@ -742,8 +736,7 @@ class SidebarTreeView(QTreeView):
         for i in items:
             itm=i.internalPointer()
             self._massDelTag(itm.fullname)
-        mw.col.tags.save()
-        mw.col.tags.flush()
+        self._saveTags()
         mw.col.tags.registerNotes()
 
     def _massDelTag(self, dragName):
@@ -815,10 +808,8 @@ class SidebarTreeView(QTreeView):
             if not found:
                 showInfo("No Cards in deck")
                 return
-            mw.col.decks.save()
-            mw.col.decks.flush()
-            mw.col.tags.save()
-            mw.col.tags.flush()
+            self._saveDecks()
+            self._saveTags()
             # self.highlight('tag',item.fullname)
             mw.col.tags.registerNotes()
             mw.requireReset()
@@ -856,10 +847,8 @@ class SidebarTreeView(QTreeView):
                     tag2Deck(tag)
         finally:
             mw.progress.finish()
-            mw.col.decks.save()
-            mw.col.decks.flush()
-            mw.col.tags.save()
-            mw.col.tags.flush()
+            self._saveDecks()
+            self._saveTags()
             # self.highlight('deck',item.fullname)
             mw.col.tags.registerNotes()
             mw.requireReset()
@@ -937,8 +926,7 @@ class SidebarTreeView(QTreeView):
             except AnkiError:
                 #user says no to full sync requirement
                 return
-        mw.col.models.save()
-        mw.col.models.flush()
+        self._saveModels()
         self.browser.setupTable()
         self.browser.model.reset()
 
@@ -981,8 +969,7 @@ class SidebarTreeView(QTreeView):
         d.exec_()
         model['latexPre'] = str(frm.latexHeader.toPlainText())
         model['latexPost'] = str(frm.latexFooter.toPlainText())
-        mw.col.models.save()
-        mw.col.models.flush()
+        self._saveModels()
 
     def onManageModel(self):
         self.browser.editor.saveNow(self.hideEditor)
@@ -1183,6 +1170,28 @@ class SidebarTreeView(QTreeView):
         try:
             del(self.marked[type][oName])
         except KeyError: pass
+
+
+    def _saveTags(self):
+        # for anki 2.1.24beta4 and below
+        try:
+            mw.col.tags.save()
+            mw.col.tags.flush()
+        except AttributeError: pass
+
+    def _saveDecks(self):
+        try:
+            mw.col.decks.save()
+            mw.col.decks.flush()
+        except AttributeError: pass
+
+    def _saveModels(self):
+        try:
+            mw.col.models.save()
+            mw.col.models.flush()
+        except AttributeError: pass
+
+
 
 
 
