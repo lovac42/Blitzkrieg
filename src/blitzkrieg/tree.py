@@ -11,6 +11,8 @@ from aqt.qt import *
 from anki.lang import ngettext, _
 from operator import  itemgetter
 
+from .lib.com.lovac42.anki.backend.collection import getConfigGetterMethod
+
 
 try:
     from aqt.browser import SidebarItem
@@ -31,11 +33,14 @@ def stdTree(browser, root):
 
 def favTree(browser, root):
     assert browser.col
-    tree=browser.sidebarTree
+    tree = browser.sidebarTree
     ico = ":/icons/heart.svg"
-    icoOpt = browser.col.conf.get('Blitzkrieg.icon_fav',True)
 
-    saved = browser.col.conf.get('savedFilters', {})
+    getConfig = getConfigGetterMethod()
+
+    icoOpt = getConfig('Blitzkrieg.icon_fav',True)
+
+    saved = getConfig('savedFilters', {})
     if not saved:
         return
     favs_tree = {}
@@ -90,7 +95,9 @@ def userTagTree(browser, root):
     assert browser.col
     tree=browser.sidebarTree
     ico = ":/icons/tag.svg"
-    icoOpt = browser.col.conf.get('Blitzkrieg.icon_tag',True)
+    getConfig = getConfigGetterMethod()
+
+    icoOpt = getConfig('Blitzkrieg.icon_tag',True)
     rootNode = SidebarItem(
         "Tags", ico,
         expanded=tree.node_state.get("group").get('tag',True)
@@ -100,7 +107,7 @@ def userTagTree(browser, root):
     root.addChild(rootNode)
 
     tags_tree = {}
-    SORT = browser.col.conf.get('Blitzkrieg.sort_tag',False)
+    SORT = getConfig('Blitzkrieg.sort_tag',False)
     TAGS = sorted(browser.col.tags.all(),
             key=lambda t: t.lower() if SORT else t)
     for t in TAGS:
@@ -149,7 +156,9 @@ def decksTree(browser, root):
     rootNode.fullname = "deck"
     root.addChild(rootNode)
 
-    SORT = browser.col.conf.get('Blitzkrieg.sort_deck',False)
+    getConfig = getConfigGetterMethod()
+
+    SORT = getConfig('Blitzkrieg.sort_deck',False)
     grps = sorted(browser.col.sched.deckDueTree(),
             key=lambda g: g[0].lower() if SORT else g[0])
     def fillGroups(rootNode, grps, head=""):
@@ -177,7 +186,7 @@ def decksTree(browser, root):
 
     fillGroups(rootNode, grps)
 
-    deck_cnt = len(browser.col.decks.decks)
+    deck_cnt = len(browser.col.decks.all())
     rootNode.tooltip = f"Total: {deck_cnt} decks"
 
 
@@ -188,7 +197,10 @@ def modelTree(browser, root):
     assert browser.col
     tree=browser.sidebarTree
     ico = ":/icons/notetype.svg"
-    icoOpt = browser.col.conf.get('Blitzkrieg.icon_model',True)
+
+    getConfig = getConfigGetterMethod()
+
+    icoOpt = getConfig('Blitzkrieg.icon_model',True)
     rootNode = SidebarItem(
         _("Models"), ico,
         expanded=tree.node_state.get("group").get('model',False)
@@ -198,7 +210,7 @@ def modelTree(browser, root):
     root.addChild(rootNode)
 
     models_tree = {}
-    SORT = browser.col.conf.get('Blitzkrieg.sort_model',False)
+    SORT = getConfig('Blitzkrieg.sort_model',False)
     MODELS = sorted(browser.col.models.all(),
             key=lambda m: m["name"].lower() if SORT else m["name"])
     for m in MODELS:

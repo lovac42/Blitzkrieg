@@ -9,8 +9,6 @@ import aqt  #TODO: RM later, for 2.1.15
 from aqt.qt import *
 from anki.lang import _
 
-from .const import POINT_VERSION
-
 
 class SidebarItem:
     def __init__(self, name, icon, onClick=None, onExpanded=None, expanded=False):
@@ -46,11 +44,11 @@ class SidebarModel(QAbstractItemModel):
         self.root = root
         self.iconCache = {} # Dict[str, QIcon]
 
-        if POINT_VERSION < 20:
-            self._getIcon = self.iconFromRef
-        else:
+        try:
             from aqt.theme import theme_manager
             self._getIcon = theme_manager.icon_from_resources
+        except ImportError:
+            self._getIcon = self.iconFromRef
 
 
     # Qt API

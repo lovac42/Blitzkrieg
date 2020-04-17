@@ -7,7 +7,6 @@
 
 import re
 import aqt
-import anki.find
 import unicodedata
 from aqt import mw
 from anki.lang import ngettext, _
@@ -17,6 +16,7 @@ from anki.utils import intTime, ids2str
 from anki.errors import DeckRenameError, AnkiError
 from anki.hooks import runHook
 
+from .lib.com.lovac42.anki.backend import collection
 
 
 class SidebarTreeView(QTreeView):
@@ -54,7 +54,12 @@ class SidebarTreeView(QTreeView):
         self.customContextMenuRequested.connect(self.onTreeMenu)
         self.setupContextMenuItems()
 
-        mw.col.tags.registerNotes() # clearn unused tags to prevent lockup
+        mw.col.tags.registerNotes() # clear unused tags to prevent lockup
+
+        self.getConf = collection.getConfigGetterMethod()
+        self.setConf = collection.getConfigSetterMethod()
+        self.findNotes = collection.getFindNotes()
+        self.findCards = collection.getFindCards()
 
 
     def clear(self):
@@ -99,7 +104,7 @@ class SidebarTreeView(QTreeView):
             return
 
         if type=='tag':
-            showConf=mw.col.conf.get('Blitzkrieg.showAllTags', True)
+            showConf = self.getConf('Blitzkrieg.showAllTags', True)
             if (showConf and fromTimer) or \
             (not showConf and not fromTimer):
                 #show all subtags option
@@ -108,7 +113,7 @@ class SidebarTreeView(QTreeView):
 
         elif type=='deck':
             #Auto update overview summary deck
-            up = mw.col.conf.get('Blitzkrieg.updateOV', False)
+            up = self.getConf('Blitzkrieg.updateOV', False)
             if up and item.type in ('deck','dyn','pinDeck','pinDyn') \
             and mw.state == 'overview':
                 d = mw.col.decks.byName(item.fullname)
@@ -157,6 +162,8 @@ class SidebarTreeView(QTreeView):
               # type -1: separator
               # type 0: normal
               # type 1: non-folder path, actual item
+              # type 2: type 0 and multi selected
+              # type 3: type 1 and multi selected
         self.MENU_ITEMS = {
             "pin":((-1,),),
             "pinDyn":(
@@ -166,7 +173,7 @@ class SidebarTreeView(QTreeView):
                 (1,"Export","Export",self._onTreeDeckExport),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
-                (1,"Unpin*",None,self._onTreePinDelete),
+                (3,"Unpin*",None,self._onTreePinDelete),
             ),
             "pinDeck":(
                 (1,"Add Notes",None,self._onTreeDeckAddCard),
@@ -174,25 +181,25 @@ class SidebarTreeView(QTreeView):
                 (1,"Export","Export",self._onTreeDeckExport),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
-                (1,"Unpin*",None,self._onTreePinDelete),
+                (3,"Unpin*",None,self._onTreePinDelete),
             ),
             "pinTag":(
                 (1,"Show All/one",None,self._timedItemClick),
-                (1,"Add Notes*",None,self._onTreeTagAddCard),
+                (3,"Add Notes*",None,self._onTreeTagAddCard),
                 (1,"Tag Selected","Tag",self._onTreeTag),
                 (1,"Untag Selected","Untag",self._onTreeUnTag),
                 (-1,),
                 (1,"Rename","Rename",self._onTreeFavRename),
-                (1,"Unpin*",None,self._onTreePinDelete),
+                (3,"Unpin*",None,self._onTreePinDelete),
             ),
             "tag":(
                 (0,"Show All/one",None,self._timedItemClick),
-                (0,"Add Notes*",None,self._onTreeTagAddCard),
+                (2,"Add Notes*",None,self._onTreeTagAddCard),
                 (0,"Rename Leaf","Rename",self._onTreeTagRenameLeaf),
                 (0,"Rename Branch","Rename",self._onTreeTagRenameBranch),
                 (0,"Tag Selected","Tag",self._onTreeTag),
                 (0,"Untag Selected","Untag",self._onTreeUnTag),
-                (0,"Delete*","Delete",self._onTreeTagDelete),
+                (2,"Delete*","Delete",self._onTreeTagDelete),
                 (-1,),
                 (0,"Convert to decks","Convert",self._onTreeTag2Deck),
             ),
@@ -219,7 +226,7 @@ class SidebarTreeView(QTreeView):
             "fav":(
                 (1,"Rename","Rename",self._onTreeFavRename),
                 (1,"Modify","Modify",self._onTreeFavModify),
-                (1,"Delete*","Delete",self._onTreeFavDelete),
+                (3,"Delete*","Delete",self._onTreeFavDelete),
             ),
             "model":(
                 (0,"Rename Leaf","Rename",self._onTreeModelRenameLeaf),
@@ -384,21 +391,21 @@ class SidebarTreeView(QTreeView):
             type = dropItem.type or "fav"
         except AttributeError:
             type = "fav"
-        saved = mw.col.conf['savedFilters']
-        for fav in list(saved):
-            act = mw.col.conf['savedFilters'].get(fav)
+        savedFilters = self.getConf('savedFilters', {})
+        for fav in list(savedFilters):
+            act = savedFilters.get(fav)
             if fav.startswith(dragName + "::"):
                 nn = fav.replace(dragName+"::", newName+"::", 1)
-                mw.col.conf['savedFilters'][nn] = act
-                del(mw.col.conf['savedFilters'][fav])
+                savedFilters[nn] = act
+                del(savedFilters[fav])
                 self.node_state[type][nn] = True
                 self._swapHighlight(type,dragName,newName)
             elif fav == dragName:
-                mw.col.conf['savedFilters'][newName] = act
-                del(mw.col.conf['savedFilters'][dragName])
+                savedFilters[newName] = act
+                del(savedFilters[dragName])
                 self.node_state[type][newName] = True
                 self._swapHighlight(type,dragName,newName)
-
+        self.setConf('savedFilters', savedFilters)
 
     def _modelDropEvent(self, dragItems, dropItem):
         if len(dragItems)>1:
@@ -447,18 +454,17 @@ class SidebarTreeView(QTreeView):
 
     def _moveTag(self, dragName, newName, dragItem=None, dropItem=None):
         "Rename tag"
-        f = anki.find.Finder(mw.col)
         # rename children
         for tag in mw.col.tags.all():
             if tag.startswith(dragName + "::"):
-                ids = f.findNotes('"tag:%s"'%tag)
+                ids = self.findNotes('"tag:%s"'%tag)
                 nn = tag.replace(dragName+"::", newName+"::", 1)
                 mw.col.tags.bulkRem(ids,tag)
                 mw.col.tags.bulkAdd(ids,nn)
                 self.node_state['tag'][nn]=True
                 self._swapHighlight('tag',tag,nn)
         # rename parent
-        ids = f.findNotes('"tag:%s"'%dragName)
+        ids = self.findNotes('"tag:%s"'%dragName)
         mw.col.tags.bulkRem(ids,dragName)
         mw.col.tags.bulkAdd(ids,newName)
         self.node_state['tag'][newName] = True
@@ -509,7 +515,7 @@ class SidebarTreeView(QTreeView):
                     act = m.addAction("Pin Item*")
                     act.triggered.connect(lambda:self._onTreePin(index))
                 if item.type in ("pin","fav"):
-                    ico = mw.col.conf.get('Blitzkrieg.icon_fav', True)
+                    ico = self.getConf('Blitzkrieg.icon_fav', True)
                     act = m.addAction("Show icon for paths")
                     act.setCheckable(True)
                     act.setChecked(ico)
@@ -519,25 +525,25 @@ class SidebarTreeView(QTreeView):
             act.triggered.connect(self.refresh)
             if item.type == "group":
                 if item.fullname in ("tag","deck","model"):
-                    sort = mw.col.conf.get('Blitzkrieg.sort_'+item.fullname, False)
+                    sort = self.getConf('Blitzkrieg.sort_'+item.fullname, False)
                     act = m.addAction("Sort by A-a-B-b")
                     act.setCheckable(True)
                     act.setChecked(sort)
                     act.triggered.connect(lambda:self._toggleSortOption(item))
                 if item.fullname in ("tag","model"):
-                    ico = mw.col.conf.get('Blitzkrieg.icon_'+item.fullname, True)
+                    ico = self.getConf('Blitzkrieg.icon_'+item.fullname, True)
                     act = m.addAction("Show icon for paths")
                     act.setCheckable(True)
                     act.setChecked(ico)
                     act.triggered.connect(lambda:self._toggleIconOption(item))
                 if item.fullname == "deck":
-                    up = mw.col.conf.get('Blitzkrieg.updateOV', False)
+                    up = self.getConf('Blitzkrieg.updateOV', False)
                     act = m.addAction("Auto Update Overview")
                     act.setCheckable(True)
                     act.setChecked(up)
                     act.triggered.connect(self._toggleMWUpdate)
                 elif item.fullname == "tag":
-                    sa = mw.col.conf.get('Blitzkrieg.showAllTags', True)
+                    sa = self.getConf('Blitzkrieg.showAllTags', True)
                     act = m.addAction("Auto Show Subtags")
                     act.setCheckable(True)
                     act.setChecked(sa)
@@ -573,11 +579,23 @@ class SidebarTreeView(QTreeView):
             act = m.addAction("Expand All*")
             act.triggered.connect(lambda:self.expandAllChildren(index,True))
 
-        else:
+        elif len(self.selectedIndexes())>1:
+            #Multi sel items
             for itm in self.MENU_ITEMS[item.type]:
                 if itm[0] < 0:
                     m.addSeparator()
-                elif not itm[0] or self.hasValue(item):
+                elif itm[0]==2 or (itm[0]==3 and self.hasValue(item)):
+                    act = m.addAction(itm[1])
+                    act.triggered.connect(
+                        lambda b, item=item, itm=itm:
+                            self._onTreeItemAction(item,itm[2],itm[3])
+                    )
+        else:
+            #Single selected itms
+            for itm in self.MENU_ITEMS[item.type]:
+                if itm[0] < 0:
+                    m.addSeparator()
+                elif itm[0] in (0,2) or self.hasValue(item):
                     act = m.addAction(itm[1])
                     act.triggered.connect(
                         lambda b, item=item, itm=itm:
@@ -740,15 +758,14 @@ class SidebarTreeView(QTreeView):
         mw.col.tags.registerNotes()
 
     def _massDelTag(self, dragName):
-        f = anki.find.Finder(mw.col)
         # rename children
         for tag in mw.col.tags.all():
             if tag.startswith(dragName + "::"):
-                ids = f.findNotes('"tag:%s"'%tag)
+                ids = self.findNotes('"tag:%s"'%tag)
                 self._swapHighlight('tag',tag,"",False)
                 mw.col.tags.bulkRem(ids,tag)
         # rename parent
-        ids = f.findNotes('"tag:%s"'%dragName)
+        ids = self.findNotes('"tag:%s"'%dragName)
         mw.col.tags.bulkRem(ids,dragName)
         self._swapHighlight('tag',dragName,"",False)
 
@@ -775,7 +792,6 @@ class SidebarTreeView(QTreeView):
         mw.progress.start(
             label=_("Converting decks to tags"))
         try:
-            f = anki.find.Finder(mw.col)
             self.browser._lastSearchTxt=""
             parentDid = mw.col.decks.byName(item.fullname)["id"]
             actv = mw.col.decks.children(parentDid)
@@ -786,7 +802,7 @@ class SidebarTreeView(QTreeView):
             for name,did in actv:
                 mw.progress.update(label=name)
                 #add subdeck tree structure as tags
-                nids = f.findNotes('''"deck:%s" -"deck:%s::*"'''%(name,name))
+                nids = self.findNotes('''"deck:%s" -"deck:%s::*"'''%(name,name))
                 if nids:
                     found = True
                     tagName = re.sub(r"\s*(::)\s*","\g<1>",name)
@@ -818,7 +834,7 @@ class SidebarTreeView(QTreeView):
     def _onTreeTag2Deck(self, item):
         def tag2Deck(tag):
             did = mw.col.decks.id(tag)
-            cids = f.findCards('"tag:%s"'%tag)
+            cids = self.findCards('"tag:%s"'%tag)
             if not cids:
                 return
             mw.col.sched.remFromDyn(cids)
@@ -826,7 +842,7 @@ class SidebarTreeView(QTreeView):
                 "update cards set usn=?, mod=?, did=? where id in %s"%ids2str(cids),
                 mw.col.usn(), intTime(), did
             )
-            nids = f.findNotes('"tag:%s"'%tag)
+            nids = self.findNotes('"tag:%s"'%tag)
             mw.col.tags.bulkRem(nids,tag)
 
         msg = _("Convert all tags to deck structure?")
@@ -837,7 +853,6 @@ class SidebarTreeView(QTreeView):
             label=_("Converting tags to decks"))
 
         try:
-            f = anki.find.Finder(mw.col)
             self.browser._lastSearchTxt=""
             parent = unicodedata.normalize("NFC", item.fullname)
             tag2Deck(parent)
@@ -855,20 +870,25 @@ class SidebarTreeView(QTreeView):
 
 
     def _onTreePinDelete(self, item):
+        savedFilters = self.getConf('savedFilters', {})
         for idx in self.selectedIndexes():
             itm = idx.internalPointer()
-            if mw.col.conf['savedFilters'].get(itm.favname):
-                del mw.col.conf['savedFilters'][itm.favname]
+            if savedFilters.get(itm.favname):
+                del savedFilters[itm.favname]
+        self.setConf('savedFilters', savedFilters)
 
     def _onTreeFavDelete(self, item):
+        savedFilters = self.getConf('savedFilters', {})
         for idx in self.selectedIndexes():
             itm = idx.internalPointer()
-            if mw.col.conf['savedFilters'].get(itm.favname) and \
+            if savedFilters.get(itm.favname) and \
             askUser(_("Remove %s from your saved searches?") % itm.favname):
-                del mw.col.conf['savedFilters'][itm.favname]
+                del savedFilters[itm.favname]
+        self.setConf('savedFilters', savedFilters)
 
     def _onTreeFavRename(self, item):
-        act=mw.col.conf['savedFilters'].get(item.favname)
+        savedFilters = self.getConf('savedFilters', {})
+        act = savedFilters.get(item.favname)
         if not act: return
         s=item.favname
         p=False
@@ -879,15 +899,18 @@ class SidebarTreeView(QTreeView):
         newName = re.sub(r"^Pinned::","",newName)
         if newName:
             if p: newName="Pinned::"+newName
-            del(mw.col.conf['savedFilters'][item.favname])
-            mw.col.conf['savedFilters'][newName] = act
+            del(savedFilters[item.favname])
+            savedFilters[newName] = act
+        self.setConf('savedFilters', savedFilters)
 
     def _onTreeFavModify(self, item):
-        act=mw.col.conf['savedFilters'].get(item.fullname)
+        savedFilters = self.getConf('savedFilters', {})
+        act = savedFilters.get(item.fullname)
         if not act: return
         act=getOnlyText(_("New Search:"),default=act)
         if act:
-            mw.col.conf['savedFilters'][item.fullname]=act
+            savedFilters[item.fullname]=act
+        self.setConf('savedFilters', savedFilters)
 
     def _onTreeModelRenameLeaf(self, item):
         self.browser._lastSearchTxt=""
@@ -988,7 +1011,7 @@ class SidebarTreeView(QTreeView):
         tags=[]
         for idx in indexes:
             item = idx.internalPointer()
-            if mw.col.conf.get('Blitzkrieg.showAllTags', True):
+            if self.getConf('Blitzkrieg.showAllTags', True):
                 tags.append('''tag:"%s*"'''%item.fullname)
             else:
                 tags.append('''tag:"%s"'''%item.fullname)
@@ -1009,6 +1032,7 @@ class SidebarTreeView(QTreeView):
         self.clearSelection()
 
     def _onTreePin(self, index):
+        savedFilters = self.getConf('savedFilters', {})
         indexes=self.selectedIndexes()
         if index not in indexes:
             indexes.append(index)
@@ -1017,9 +1041,8 @@ class SidebarTreeView(QTreeView):
             name = "Pinned::%s"%(
                 item.fullname.split("::")[-1])
             search = '"%s:%s"'%(item.type,item.fullname)
-            if "savedFilters" not in mw.col.conf:
-                mw.col.conf['savedFilters'] = {}
-            mw.col.conf['savedFilters'][name] = search
+            savedFilters[name] = search
+        self.setConf('savedFilters', savedFilters)
         self.browser.maybeRefreshSidebar()
 
     def onEmptyAll(self):
@@ -1038,28 +1061,30 @@ class SidebarTreeView(QTreeView):
         if item.type == "model":
             return mw.col.models.byName(item.fullname)
         if item.type == "fav":
-            return mw.col.conf['savedFilters'].get(item.fullname)
+            savedFilters = self.getConf('savedFilters', {})
+            return savedFilters.get(item.fullname)
         if item.type in ("pinTag","pinDeck","pinDyn"):
-            return mw.col.conf['savedFilters'].get(item.favname)
+            savedFilters = self.getConf('savedFilters', {})
+            return savedFilters.get(item.favname)
         return False
 
     def _toggleMWUpdate(self):
-        up = mw.col.conf.get('Blitzkrieg.updateOV', False)
-        mw.col.conf['Blitzkrieg.updateOV'] = not up
+        up = self.getConf('Blitzkrieg.updateOV', False)
+        self.setConf('Blitzkrieg.updateOV', not up)
 
     def _toggleShowSubtags(self):
-        sa = mw.col.conf.get('Blitzkrieg.showAllTags', True)
-        mw.col.conf['Blitzkrieg.showAllTags'] = not sa
+        sa = self.getConf('Blitzkrieg.showAllTags', True)
+        self.setConf('Blitzkrieg.showAllTags', not sa)
 
     def _toggleSortOption(self, item):
-        sort = not mw.col.conf.get('Blitzkrieg.sort_'+item.fullname,False)
-        mw.col.conf['Blitzkrieg.sort_'+item.fullname] = sort
+        sort = not self.getConf('Blitzkrieg.sort_'+item.fullname,False)
+        self.setConf('Blitzkrieg.sort_'+item.fullname, sort)
         self.browser.maybeRefreshSidebar()
 
     def _toggleIconOption(self, item):
         TYPE='fav' if item.type in ("pin","fav") else item.fullname
-        ico = not mw.col.conf.get('Blitzkrieg.icon_'+TYPE,True)
-        mw.col.conf['Blitzkrieg.icon_'+TYPE] = ico
+        ico = not self.getConf('Blitzkrieg.icon_'+TYPE,True)
+        self.setConf('Blitzkrieg.icon_'+TYPE, ico)
         self.browser.maybeRefreshSidebar()
 
 
