@@ -6,7 +6,7 @@ set VERSION=0.2.0
 fsum -r -jm -md5 -d%REPO% * > checksum.md5
 move checksum.md5 %REPO%/checksum.md5
 
-echo from .main import * >>%REPO%/__init__.py
+echo     from .main import * >>%REPO%/__init__.py
 
 quick_manifest.exe "Blitzkrieg II - Advanced Browser Sidebar" "564851917" >%REPO%/manifest.json
 
