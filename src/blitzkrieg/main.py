@@ -71,10 +71,11 @@ addHook('profileLoaded', onProfileLoaded)
 
 
 def onRevertedState(stateName):
-    tok=stateName.split()[-1]
-    if tok=='deck' or \
-    tok in browserInstance.sidebarTree.node_state.keys():
-        browserInstance.sidebarTree.refresh()
+    if browserInstance:
+        tok=stateName.split()[-1]
+        if tok=='deck' or \
+        tok in browserInstance.sidebarTree.node_state.keys():
+            browserInstance.sidebarTree.refresh()
 
 addHook("revertedState", onRevertedState)
 
