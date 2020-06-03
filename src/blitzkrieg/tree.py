@@ -58,6 +58,9 @@ def favTree(browser, root):
                     type = "pinTag"
                     ico = "tag.svg"
                     fname = filt[5:-1]
+
+                    # TODO: fix tags with () chars
+
                 elif filt.startswith('"deck:'):
                     type = "pinDeck"
                     ico = "deck.svg"
@@ -97,6 +100,8 @@ def userTagTree(browser, root):
     ico = ":/icons/tag.svg"
     getConfig = getConfigGetterMethod()
 
+    showConf = getConfig('Blitzkrieg.showAllTags', True)
+
     icoOpt = getConfig('Blitzkrieg.icon_tag',True)
     rootNode = SidebarItem(
         "Tags", ico,
@@ -120,10 +125,16 @@ def userTagTree(browser, root):
             if not tags_tree.get(leaf_tag):
                 parent = tags_tree['::'.join(node[0:idx])] if idx else rootNode
                 exp = tree.node_state.get('tag').get(leaf_tag,False)
+
+                if showConf:
+                    fil = f'("tag:{leaf_tag}" or "tag:{leaf_tag}::*")'
+                    click = browser._filterFunc(fil)
+                else:
+                    click = browser._filterFunc("tag", leaf_tag)
+
                 item = SidebarItem(
                     name, ico if icoOpt or idx==lstIdx else None,
-                    browser._filterFunc("tag",leaf_tag),
-                    expanded=exp
+                    click, expanded=exp
                 )
                 parent.addChild(item)
 

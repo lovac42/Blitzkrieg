@@ -103,15 +103,15 @@ class SidebarTreeView(QTreeView):
         except AttributeError:
             return
 
-        if type=='tag':
-            showConf = self.getConf('Blitzkrieg.showAllTags', True)
-            if (showConf and fromTimer) or \
-            (not showConf and not fromTimer):
+        # if type=='tag':
+            # showConf = self.getConf('Blitzkrieg.showAllTags', True)
+            # if (showConf and fromTimer) or \
+            # (not showConf and not fromTimer):
                 #show all subtags option
-                el = self.browser.form.searchEdit.lineEdit()
-                el.setText(el.text()+"*")
+                # el = self.browser.form.searchEdit.lineEdit()
+                # el.setText(el.text()+"*")
 
-        elif type=='deck':
+        if type=='deck':
             #Auto update overview summary deck
             up = self.getConf('Blitzkrieg.updateOV', False)
             if up and item.type in ('deck','dyn','pinDeck','pinDyn') \
@@ -1005,18 +1005,9 @@ class SidebarTreeView(QTreeView):
 
 
     def _onTreeCramTags(self, index):
-        indexes=self.selectedIndexes()
-        if index not in indexes:
-            indexes.append(index)
-        tags=[]
-        for idx in indexes:
-            item = idx.internalPointer()
-            if self.getConf('Blitzkrieg.showAllTags', True):
-                tags.append('''tag:"%s*"'''%item.fullname)
-            else:
-                tags.append('''tag:"%s"'''%item.fullname)
+        line = self.browser.form.searchEdit.lineEdit()
         self.clearSelection()
-        mw.onCram("("+" or ".join(tags)+")")
+        mw.onCram(line.text())
 
 
     def _onTreeMark(self, index):
@@ -1075,6 +1066,7 @@ class SidebarTreeView(QTreeView):
     def _toggleShowSubtags(self):
         sa = self.getConf('Blitzkrieg.showAllTags', True)
         self.setConf('Blitzkrieg.showAllTags', not sa)
+        self.refresh()
 
     def _toggleSortOption(self, item):
         sort = not self.getConf('Blitzkrieg.sort_'+item.fullname,False)
